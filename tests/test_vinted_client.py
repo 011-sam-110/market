@@ -125,3 +125,63 @@ def test_handshake_is_lazy_and_happens_once():
     c.search(catalog_ids=3565)
     c.search(catalog_ids=3565)
     assert c.session.calls.count("https://www.vinted.co.uk/") == 1
+
+
+# --- session self-healing ---------------------------------------------------
+#
+# Found live: the collector ran 23 clean ticks, then took a 403 and never
+# recovered - every subsequent tick failed the same way while a second process
+# on the same machine kept working fine. Two causes, both here.
+
+class FakeCookieJar(dict):
+    def __init__(self):
+        super().__init__()
+        self.cleared = 0
+
+    def clear(self):
+        self.cleared += 1
+        super().clear()
+
+
+def test_rehandshake_starts_a_fresh_identity():
+    """Re-fetching the homepage on the same cookie jar is not a new session.
+
+    If Vinted has flagged the cookies we are holding, handing them back with
+    the request is the one thing guaranteed not to help.
+    """
+    session = FakeSession([FakeResponse(200, text="<html/>")])
+    session.cookies = FakeCookieJar()
+    session.cookies["flagged"] = "1"
+
+    VintedClient(session=session).handshake()
+
+    assert session.cookies.cleared == 1
+    assert "flagged" not in session.cookies
+
+
+def test_a_dead_session_is_not_reused_forever():
+    """After a failed re-handshake the next call must start over, not give up.
+
+    _handshaked stayed True through the failure, so every later tick reused the
+    session already known to be rejected and could not self-heal.
+    """
+    session = FakeSession([
+        FakeResponse(200, text="<html/>"),    # lazy first handshake
+        FakeResponse(403),                    # search
+        FakeResponse(200, text="<html/>"),    # re-handshake
+        FakeResponse(403),                    # search again
+    ])
+    session.cookies = FakeCookieJar()
+    c = VintedClient(session=session)
+
+    with pytest.raises(PermissionError):
+        c.search(catalog_ids=3565)
+
+    assert c._handshaked is False, "a rejected session must not be marked good"
+
+    # The next call gets a genuinely fresh start rather than reusing the corpse.
+    session.responses = [
+        FakeResponse(200, text="<html/>"),
+        FakeResponse(200, {"items": [{"id": 1}]}),
+    ]
+    assert c.search(catalog_ids=3565) == [{"id": 1}]

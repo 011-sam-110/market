@@ -45,7 +45,15 @@ class VintedClient:
         self._handshaked = False
 
     def handshake(self) -> None:
-        """Fetch the homepage to pick up an anonymous session cookie."""
+        """Fetch the homepage to pick up a fresh anonymous session cookie.
+
+        Clearing the jar first is the whole point. Re-fetching the homepage
+        while still holding cookies Vinted has flagged hands the same rejected
+        identity straight back, which is the one thing guaranteed not to help --
+        and it is how the collector managed 23 clean ticks and then 403'd
+        forever while a second process on the same IP carried on fine.
+        """
+        self.session.cookies.clear()
         self.session.headers.update({
             "User-Agent": USER_AGENT,
             "Accept": "application/json, text/plain, */*",
@@ -90,6 +98,10 @@ class VintedClient:
             self.handshake()
             response = self.session.get(url, timeout=self.timeout)
             if response.status_code in (401, 403):
+                # Mark the session dead so the NEXT call starts over instead of
+                # reusing the corpse. Without this the flag stayed True through
+                # the failure and every later tick repeated it identically.
+                self._handshaked = False
                 raise PermissionError(
                     f"still {response.status_code} after re-handshake — "
                     "credentials or anti-bot posture may have changed"
