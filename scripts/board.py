@@ -21,7 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from phoneloop import config, spread  # noqa: E402
+from phoneloop import config, pricing, spread  # noqa: E402
 from phoneloop.parser import parse  # noqa: E402
 from phoneloop.verifier import extract_description  # noqa: E402
 from phoneloop.vinted_client import VintedClient  # noqa: E402
@@ -32,61 +32,6 @@ PROBE_SPACING_S = 22
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-
-
-def load(path: Path) -> dict:
-    if not path.exists():
-        return {}
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def cex_cash(table: dict, model: str, storage_gb: int | None,
-             grade: str) -> int | None:
-    """Prefer a capacity-specific box; fall back to the model-wide figure.
-
-    A model-wide CeX price is the cheapest capacity CeX stocks, so using it for
-    a 512GB handset understates the exit. That is the safe direction to be
-    wrong in, but it is still wrong, and the caller is told which it got.
-    """
-    for entry in table.values():
-        if entry.get("model") == model and entry.get("storage_gb") == storage_gb:
-            return (entry.get("cash_pence") or {}).get(grade)
-    for entry in table.values():
-        if entry.get("model") == model and entry.get("storage_gb") is None:
-            return (entry.get("cash_pence") or {}).get(grade)
-    return None
-
-
-def ebay_ceiling(table: dict, model: str,
-                 storage_gb: int | None) -> tuple[int | None, bool]:
-    """Returns (ceiling, exact). `exact` is False for a capacity-mixed figure.
-
-    A model-wide eBay median is not a bound in either direction, which is why
-    it is marked rather than adjusted. Measured against capacity-specific
-    queries on the same day:
-
-        iPhone 12          model-wide 11100   128GB 18900    +70%
-        iPhone 14          model-wide 21200   128GB 27000    +27%
-        iPhone 14 Pro Max  model-wide 41300   128GB 42600     +3%
-        iPhone 13 Pro      model-wide 29100   128GB 28800     -1%
-
-    The sign is not stable and the size reaches 70%, so a mixed figure cannot
-    be leaned on as either a floor or a ceiling. It is worth showing because
-    it is the only number available for that handset, and worth marking because
-    a margin computed from it is not a margin, it is a placeholder.
-
-    The CeX side behaves differently: a model-wide CeX price is the cheapest
-    capacity CeX stocks, so it genuinely does understate the exit.
-    """
-    for entry in table.values():
-        if entry.get("model") == model and entry.get("storage_gb") == storage_gb:
-            # Both sides None is not a match, it is two unknowns agreeing.
-            # Calling that exact would hide the widest uncertainty on the board.
-            return entry.get("ceiling_pence"), storage_gb is not None
-    for entry in table.values():
-        if entry.get("model") == model and entry.get("storage_gb") is None:
-            return entry.get("ceiling_pence"), False
-    return None, False
 
 
 def main() -> int:
@@ -101,8 +46,8 @@ def main() -> int:
     args = ap.parse_args()
 
     cfg = config.load()
-    cex_table = load(cfg.DATA_DIR / "cex_prices.json")
-    ebay_table = load(cfg.DATA_DIR / "ebay_ceilings.json")
+    cex_table = pricing.load_table(cfg.DATA_DIR / "cex_prices.json")
+    ebay_table = pricing.load_table(cfg.DATA_DIR / "ebay_ceilings.json")
     fees = spread.PRIVATE if args.private else spread.BUSINESS
 
     print(f"CeX table: {len(cex_table)} models   "
@@ -132,13 +77,11 @@ def main() -> int:
             continue
         buy_pence = round(float(buy) * 100)
 
-        ceiling, exact = ebay_ceiling(ebay_table, spec.model, spec.storage_gb)
-        s = spread.evaluate(
-            buy_pence,
-            cex_cash(cex_table, spec.model, spec.storage_gb, args.grade),
-            ceiling,
-            fees=fees,
-        )
+        cash, _ = pricing.cex_cash(cex_table, spec.model, spec.storage_gb,
+                                   args.grade)
+        ceiling, exact = pricing.ebay_ceiling(ebay_table, spec.model,
+                                              spec.storage_gb)
+        s = spread.evaluate(buy_pence, cash, ceiling, fees=fees)
         if s is None:
             unpriceable += 1
             continue

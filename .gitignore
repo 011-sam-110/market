@@ -10,3 +10,10 @@ data/
 *.duckdb
 cookies.txt
 *.json.gz
+
+# Recorded fixtures (phoneloop/harness.py). Deliberately not committed: one
+# capture is ~9MB of real marketplace HTML and the feed moves hourly, so the
+# history would bloat with snapshots that go stale immediately. Rebuild with
+#   PHONELOOP_HARNESS=record python scripts/capture.py
+# The test suite does not depend on them -- it builds its own in tmp_path.
+fixtures/

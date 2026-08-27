@@ -26,6 +26,22 @@ USER_AGENT = (
 )
 
 
+def session_headers(base_url: str = BASE_URL) -> dict[str, str]:
+    """The headers an anonymous browsing session presents.
+
+    Exposed rather than inlined in handshake() because the capture script has
+    to send exactly the same set. It does not: sending only a User-Agent, with
+    no Accept and no Referer, gets a 403 that survives every exit-IP rotation
+    and looks convincingly like an address block. One definition, so the two
+    cannot drift apart again.
+    """
+    return {
+        "User-Agent": USER_AGENT,
+        "Accept": "application/json, text/plain, */*",
+        "Referer": f"{base_url.rstrip('/')}/",
+    }
+
+
 class RateLimited(Exception):
     """Vinted asked us to slow down. The caller backs off; it does not retry here."""
 
@@ -87,11 +103,7 @@ class VintedClient:
         forever while a second process on the same IP carried on fine.
         """
         self.session.cookies.clear()
-        self.session.headers.update({
-            "User-Agent": USER_AGENT,
-            "Accept": "application/json, text/plain, */*",
-            "Referer": f"{self.base_url}/",
-        })
+        self.session.headers.update(session_headers(self.base_url))
         self.session.get(f"{self.base_url}/", timeout=self.timeout)
         self._handshaked = True
         log.debug("handshake complete")
@@ -130,11 +142,13 @@ class VintedClient:
             log.info("session rejected (%s), re-handshaking once", response.status_code)
             self.handshake()
             response = self.session.get(url, timeout=self.timeout)
+            rotated = False
             if response.status_code in (401, 403):
                 # A new cookie jar was not enough, so the block is on the
                 # address rather than the session. Rotate to a new exit IP and
                 # try once more before giving up.
-                if self.rotate():
+                rotated = self.rotate()
+                if rotated:
                     log.info("still %s, rotating exit IP", response.status_code)
                     self._ensure_session()
                     response = self.session.get(url, timeout=self.timeout)
@@ -144,10 +158,16 @@ class VintedClient:
                 # reusing the corpse. Without this the flag stayed True through
                 # the failure and every later tick repeated it identically.
                 self._handshaked = False
+                # Say which remedies were actually tried. Claiming a
+                # rotation that never happened sends the reader looking at the
+                # proxy when the real answer is that this client does not own
+                # its session and so cannot rotate at all.
+                tried = ("re-handshake and an exit-IP rotation" if rotated
+                         else "re-handshake (no rotation: the session was "
+                              "injected, so it is not ours to rebuild)")
                 raise PermissionError(
-                    f"still {response.status_code} after re-handshake and an "
-                    "exit-IP rotation — credentials or anti-bot posture may "
-                    "have changed"
+                    f"still {response.status_code} after {tried} — "
+                    "credentials or anti-bot posture may have changed"
                 )
 
         if response.status_code != 200:

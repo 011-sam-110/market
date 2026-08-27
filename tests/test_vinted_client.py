@@ -7,7 +7,7 @@ quiet — the worst possible failure, because it looks exactly like a slow marke
 
 import pytest
 
-from phoneloop.vinted_client import RateLimited, SchemaChanged, VintedClient
+from phoneloop.vinted_client import session_headers, RateLimited, SchemaChanged, VintedClient
 
 
 class FakeResponse:
@@ -225,4 +225,35 @@ class TestExitRotation:
         client = VintedClient(session=session)
         with pytest.raises(PermissionError) as exc:
             client.search(catalog_ids=2999)
-        assert "rotation" in str(exc.value)
+        message = str(exc.value)
+        assert "no rotation" in message, "must not claim a remedy it never tried"
+        assert "injected" in message, "and must say why it could not"
+
+
+class TestSessionHeaders:
+    """One definition of what an anonymous session presents.
+
+    The capture script sent only a User-Agent, and the resulting 403 survived
+    every exit-IP rotation and looked exactly like an address block. It was a
+    missing Accept and Referer. Both callers now share this, so they cannot
+    drift apart again.
+    """
+
+    def test_it_carries_all_three(self):
+        headers = session_headers("https://www.vinted.co.uk")
+        assert set(headers) == {"User-Agent", "Accept", "Referer"}
+
+    def test_the_referer_matches_the_base_url(self):
+        assert session_headers("https://www.vinted.co.uk")["Referer"] == \
+            "https://www.vinted.co.uk/"
+
+    def test_a_trailing_slash_does_not_double(self):
+        assert session_headers("https://www.vinted.co.uk/")["Referer"] == \
+            "https://www.vinted.co.uk/"
+
+    def test_the_handshake_applies_exactly_this_set(self):
+        session = FakeSession([FakeResponse(200, text="homepage")])
+        client = VintedClient(session=session)
+        client.handshake()
+        for key, value in session_headers().items():
+            assert session.headers.get(key) == value
