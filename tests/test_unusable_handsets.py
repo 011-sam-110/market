@@ -25,8 +25,14 @@ from phoneloop.verifier import count_photos
 
 # --- verbatim from live listings, 2026-08-27 -------------------------------
 
+# Vinted item 9790839626, re-fetched 2026-08-27. Note the apostrophe: it is
+# U+2019, not ASCII. That is what Vinted's own composer produces, so it is what
+# the rules actually face. An earlier version of this fixture quietly retyped it
+# as a straight quote while claiming to be verbatim -- the same shortcut that
+# once let a photo counter return zero for every real listing and pass its own
+# test. parser._normalise folds it; this fixture is what proves that.
 LOCKED_NO_PASSWORD = (
-    "Locked and I don't know the password but would be good once gets "
+    "Locked and I don’t know the password but would be good once gets "
     "unlocked by professional"
 )
 
@@ -36,6 +42,16 @@ class TestActivationLock:
         # The regression this file exists for.
         spec = parse("iPhone 14", LOCKED_NO_PASSWORD)
         assert "activation_locked" in spec.disqualifiers
+
+    def test_a_curly_apostrophe_does_not_defeat_the_rule(self):
+        """LOCKED_NO_PASSWORD would still be caught if normalisation broke,
+        because it also says "Locked ... password" and a second clause covers
+        that. This one has no such safety net: the only thing standing between
+        it and a false pass is parser._normalise folding U+2019.
+        """
+        text = "I don’t know the passcode, selling as spares"
+        assert "’" in text, "the point of this test is the curly quote"
+        assert "activation_locked" in parse("iPhone 12", text).disqualifiers
 
     @pytest.mark.parametrize("text", [
         "locked and i don't know the password",
