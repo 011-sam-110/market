@@ -29,6 +29,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from phoneloop.parser import parse as _parse_model
+
 # "Apple iPhone 12 128GB Black, Unlocked B"
 #  make  model      storage colour   network  grade
 _BOX_RE = re.compile(
@@ -57,6 +59,16 @@ class CexBox:
     colour: str = ""
     network: str = ""
     grade: str = ""
+
+    @property
+    def model_slug(self) -> str | None:
+        """The box's model as a slug, via the same parser the feed uses.
+
+        Sharing the parser is the point: a CeX box and a Vinted title have to
+        agree on what "iPhone 17 Pro Max" is called, or the price lookup
+        silently misses and the handset drops off the board.
+        """
+        return _parse_model(f"{self.make} {self.model}").model
 
     @property
     def unlocked(self) -> bool:
@@ -156,16 +168,25 @@ def parse_sell_page(text: str) -> list[CexBox]:
     return boxes
 
 
-def best_cash(boxes: list[CexBox], grade: str = "B") -> int | None:
+def best_cash(boxes: list[CexBox], grade: str = "B",
+              model: str | None = None) -> int | None:
     """The cash price for unlocked stock at a given grade.
 
     Grade B is the default because it is CeX's "good condition" tier and maps
     most closely to how a used Vinted handset is usually described. Returns the
     lowest matching price: where several colours differ, the conservative one is
     the one that will not overstate a margin.
+
+    `model` narrows to one exact handset, and leaving it out is dangerous. A
+    CeX search for "iphone 17" also returns the 17 Pro, 17 Pro Max and Air, and
+    taking a minimum across all of them mixes four different handsets. The tell
+    is a grade ordering that cannot happen: the first unfiltered run of this
+    function returned A=34000, B=32100, C=36100 for the iPhone 17, and a grade
+    C cannot be worth more than a grade A of the same phone.
     """
     matching = [
         b.cash_pence for b in boxes
         if b.unlocked and b.grade == grade.upper() and b.cash_pence > 0
+        and (model is None or b.model_slug == model)
     ]
     return min(matching) if matching else None

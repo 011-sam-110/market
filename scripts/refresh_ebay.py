@@ -176,7 +176,21 @@ def main() -> int:
         browser.close()
 
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(table, indent=2), encoding="utf-8")
+    # Merge, never overwrite. These tables are built up across many runs -- CeX
+    # and eBay both rate-limit, so a full rebuild in one pass is not possible --
+    # and a query that failed this time must not delete the good price it
+    # returned last time.
+    merged = {}
+    if out.exists():
+        try:
+            merged = json.loads(out.read_text(encoding="utf-8"))
+        except ValueError:
+            print(f"  ! {out} was unreadable, starting fresh")
+    kept = len(merged)
+    merged.update(table)
+    out.write_text(json.dumps(merged, indent=2), encoding="utf-8")
+    print(f"table now holds {len(merged)} entries "
+          f"({len(merged) - kept} new this run)")
     priced = sum(1 for v in table.values() if v["ceiling_pence"])
     print(f"\n{priced}/{len(table)} queries produced a usable ceiling")
     print(f"written to {out}")

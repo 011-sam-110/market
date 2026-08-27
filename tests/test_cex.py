@@ -174,3 +174,61 @@ class TestBestCash:
 @pytest.mark.parametrize("grade,expected", [("B", 11000), ("C", 8500)])
 def test_grades_are_read_independently(grade, expected):
     assert best_cash(parse_sell_page(LIVE_PAGE), grade) == expected
+
+
+class TestVariantContamination:
+    """A CeX search for "iphone 17" also returns the 17 Pro, Pro Max and Air.
+
+    best_cash takes a minimum, so without a model filter it mixes four
+    different handsets. The live tell was a grade ordering that cannot exist:
+    the unfiltered run returned A=34000, B=32100, C=36100 for the iPhone 17,
+    and a grade C is never worth more than a grade A of the same phone. With
+    the filter the same query returns 40500 / 38300 / 36100.
+    """
+
+    def _box(self, model, grade, pence, network="Unlocked"):
+        return CexBox(
+            box_name=f"Apple {model} 128GB Black, {network} {grade}",
+            cash_pence=pence, voucher_pence=pence + 1000,
+            make="apple", model=model, storage_gb=128,
+            colour="Black", network=network, grade=grade,
+        )
+
+    def test_a_pro_does_not_price_the_base_model(self):
+        boxes = [
+            self._box("iPhone 17", "B", 38300),
+            self._box("iPhone 17 Pro", "B", 51300),
+            self._box("iPhone 17 Pro Max", "B", 54000),
+        ]
+        assert best_cash(boxes, "B", model="iphone-17") == 38300
+        assert best_cash(boxes, "B", model="iphone-17-pro") == 51300
+
+    def test_grades_stay_ordered_once_filtered(self):
+        """The property that exposed the bug, pinned as a property."""
+        boxes = [
+            self._box("iPhone 17", "A", 40500),
+            self._box("iPhone 17", "B", 38300),
+            self._box("iPhone 17", "C", 36100),
+            self._box("iPhone 17 Pro Max", "C", 30000),   # the contaminant
+        ]
+        a = best_cash(boxes, "A", model="iphone-17")
+        b = best_cash(boxes, "B", model="iphone-17")
+        c = best_cash(boxes, "C", model="iphone-17")
+        assert a > b > c, f"grades out of order: A={a} B={b} C={c}"
+
+    def test_without_a_filter_the_contaminant_wins(self):
+        """Documents the old behaviour so the fix cannot be quietly reverted."""
+        boxes = [
+            self._box("iPhone 17", "C", 36100),
+            self._box("iPhone 17 Pro Max", "C", 30000),
+        ]
+        assert best_cash(boxes, "C") == 30000
+        assert best_cash(boxes, "C", model="iphone-17") == 36100
+
+    def test_a_locked_box_is_still_excluded(self):
+        boxes = [self._box("iPhone 17", "B", 20000, network="EE")]
+        assert best_cash(boxes, "B", model="iphone-17") is None
+
+    def test_an_unmatched_model_is_none_not_a_fallback(self):
+        boxes = [self._box("iPhone 17 Pro", "B", 51300)]
+        assert best_cash(boxes, "B", model="iphone-17") is None

@@ -43,6 +43,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from phoneloop import config  # noqa: E402
 from phoneloop.cex import best_cash, parse_sell_page  # noqa: E402
+from phoneloop.parser import parse as parse_model  # noqa: E402
 from phoneloop.parser import parse  # noqa: E402
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -150,11 +151,23 @@ def main() -> int:
                 print(f"  {text:<34} FAILED {type(exc).__name__}: {str(exc)[:50]}")
                 continue
 
-            cash = {g: best_cash(boxes, g) for g in GRADES}
+            # An explicit --query still has to resolve to a model slug, or the
+            # board can never match the entry to a listing and the price sits
+            # in the table doing nothing. Derive it the same way the feed does.
+            want = pair[0] if not args.query else parse_model(text).model
+            storage = pair[1] if not args.query else parse_model(text).storage_gb
+            if want is None:
+                print(f"  {text:<34} SKIPPED - no model slug from that query")
+                continue
+
+            # Narrow to the exact handset. Without this the minimum is taken
+            # across every variant the search returned, which mixes four
+            # different phones for a query like "iphone 17".
+            cash = {g: best_cash(boxes, g, model=want) for g in GRADES}
             unlocked = [b for b in boxes if b.unlocked]
             table[text] = {
-                "model": pair[0] if not args.query else None,
-                "storage_gb": pair[1] if not args.query else None,
+                "model": want,
+                "storage_gb": storage,
                 "cash_pence": cash,
                 "boxes_seen": len(boxes),
                 "unlocked_seen": len(unlocked),
@@ -163,12 +176,27 @@ def main() -> int:
             shown = "  ".join(
                 f"{g}=£{v/100:.0f}" if v else f"{g}=-" for g, v in cash.items()
             )
-            print(f"  {text:<34} {len(boxes):>3} boxes  {shown}")
+            kept = sum(1 for b in boxes if b.model_slug == want)
+            print(f"  {text:<34} {kept:>2}/{len(boxes):>2} boxes  {shown}")
             time.sleep(PAUSE_S)
         browser.close()
 
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(table, indent=2), encoding="utf-8")
+    # Merge, never overwrite. These tables are built up across many runs -- CeX
+    # and eBay both rate-limit, so a full rebuild in one pass is not possible --
+    # and a query that failed this time must not delete the good price it
+    # returned last time.
+    merged = {}
+    if out.exists():
+        try:
+            merged = json.loads(out.read_text(encoding="utf-8"))
+        except ValueError:
+            print(f"  ! {out} was unreadable, starting fresh")
+    kept = len(merged)
+    merged.update(table)
+    out.write_text(json.dumps(merged, indent=2), encoding="utf-8")
+    print(f"table now holds {len(merged)} entries "
+          f"({len(merged) - kept} new this run)")
     priced = sum(1 for v in table.values() if any(v["cash_pence"].values()))
     print(f"\n{priced}/{len(table)} queries returned a usable cash price")
     print(f"written to {out}")
