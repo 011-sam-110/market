@@ -24,6 +24,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 # Vinted's result cap per query. Ten pages of 96. Page 11 returns HTTP 400.
+# Kept as a bare module constant (not just RESULT_CAPS["vinted"]) so existing
+# callers and config.RESULT_CAP still agree without a rename.
 RESULT_CAP = 960
 
 # A shard is treated as truncated at this fraction of the cap. Not 1.0: pages
@@ -31,6 +33,18 @@ RESULT_CAP = 960
 # mid-query), so a genuinely saturated shard lands a little under 960 and an
 # exact test would call it complete and silently drop the remainder.
 SATURATED_AT = 0.94
+
+# The cap is per *source*, not a universal constant. eBay's Browse API paginates
+# by offset rather than by fixed pages, and the measured ceiling is different:
+# page 45 at 240 rows/page returned zero `itemSummaries` on a query whose header
+# claimed "21,000+ results" -- the header count is not a denominator (design
+# spec section 11), 10,000 is.
+RESULT_CAPS: dict[str, int] = {"vinted": RESULT_CAP, "ebay": 10_000}
+
+# Per-source saturation fraction. eBay's cap is exact -- an offset search either
+# returns a full page or an empty one, there is no "pages return 94 of 96"
+# fuzziness the way Vinted has -- so eBay's fraction is 1.0.
+SATURATED_AT_BY_SOURCE: dict[str, float] = {"vinted": SATURATED_AT, "ebay": 1.0}
 
 # Stop splitting here. Below a pound the bands stop separating anything, and a
 # category with 960+ items inside one pound is a category we cannot enumerate
@@ -164,9 +178,23 @@ def leaves_of(tree: list[dict], root_id: int) -> list[tuple[int, str]]:
 
 # --- adaptive price sharding ----------------------------------------------
 
-def is_saturated(unique_seen: int) -> bool:
-    """Did this shard hit the cap, i.e. is it hiding items we never saw?"""
-    return unique_seen >= RESULT_CAP * SATURATED_AT
+def result_cap(source: str) -> int:
+    """The result cap for one source. Unknown source raises KeyError rather
+    than silently guessing Vinted's -- a wrong guess for a new source would
+    stop a sweep 89x early (960 vs eBay's 10,000) and nobody would notice."""
+    return RESULT_CAPS[source]
+
+
+def is_saturated(unique_seen: int, source: str = "vinted") -> bool:
+    """Did this shard hit its source's cap, i.e. is it hiding items we never saw?
+
+    `source` defaults to "vinted" so the existing call site
+    (scripts/bulk_vinted.py: `catalog.is_saturated(n)`) keeps working
+    unchanged. For eBay this is the cap guard that stops a sweep at 10,000;
+    the *operational* saturation test in the sweep loop itself is still
+    "the page came back with zero rows", never this rounded threshold.
+    """
+    return unique_seen >= result_cap(source) * SATURATED_AT_BY_SOURCE[source]
 
 
 def split_band(lo_pence: int, hi_pence: int) -> list[tuple[int, int]]:
