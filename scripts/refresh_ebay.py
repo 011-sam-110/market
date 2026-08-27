@@ -154,12 +154,18 @@ def main() -> int:
             # search for "iphone 13" also returns the mini, the Pro and the
             # Pro Max, and pooling them yields a median that describes no
             # actual handset.
-            want = None if args.query else model
+            # An explicit --query must still resolve to a slug or the entry
+            # can never match a listing. Same failure the CeX table had.
+            want = model if not args.query else parse(text).model
+            storage = storage if not args.query else parse(text).storage_gb
+            if want is None:
+                print(f"  {text:<30} SKIPPED - no model slug from that query")
+                continue
             ceiling = retail_ceiling(listings, storage_gb=storage, model=want)
             sat = saturation(listings)
             table[text] = {
-                "model": model if not args.query else None,
-                "storage_gb": storage if not args.query else None,
+                "model": want,
+                "storage_gb": storage,
                 "ceiling_pence": ceiling.median_pence if ceiling else None,
                 "mad_pence": ceiling.mad_pence if ceiling else None,
                 "samples": ceiling.samples if ceiling else 0,

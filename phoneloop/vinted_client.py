@@ -48,9 +48,34 @@ class VintedClient:
         # Only route a session we made ourselves. An injected one belongs to the
         # caller -- in tests that is a fake with no proxy support at all, and
         # reaching into it would be the library deciding something that is not
-        # its business.
-        if session is None:
+        # its business. The same flag gates rotate().
+        self._owns_session = session is None
+        if self._owns_session:
             proxies.apply(self.session)
+
+    def rotate(self) -> bool:
+        """Drop the connection pool so the next request takes a new exit IP.
+
+        Only meaningful behind the rotating residential gateway, which hands
+        out a fresh exit per *connection*. handshake() clears cookies, but
+        requests keeps the pooled TCP connection alive, so the retry leaves
+        from the same address that was just blocked and is refused again for
+        exactly the same reason. Measured: a 403 that survived a re-handshake
+        cleared on the first attempt from a fresh process, three times of three.
+
+        Returns False when the session was injected by the caller -- rebuilding
+        someone else's session, or a test's fake, is not this class's decision.
+        """
+        if not self._owns_session:
+            return False
+        try:
+            self.session.close()
+        except Exception:                        # noqa: BLE001
+            pass
+        self.session = requests.Session()
+        proxies.apply(self.session)
+        self._handshaked = False
+        return True
 
     def handshake(self) -> None:
         """Fetch the homepage to pick up a fresh anonymous session cookie.
@@ -106,13 +131,23 @@ class VintedClient:
             self.handshake()
             response = self.session.get(url, timeout=self.timeout)
             if response.status_code in (401, 403):
+                # A new cookie jar was not enough, so the block is on the
+                # address rather than the session. Rotate to a new exit IP and
+                # try once more before giving up.
+                if self.rotate():
+                    log.info("still %s, rotating exit IP", response.status_code)
+                    self._ensure_session()
+                    response = self.session.get(url, timeout=self.timeout)
+
+            if response.status_code in (401, 403):
                 # Mark the session dead so the NEXT call starts over instead of
                 # reusing the corpse. Without this the flag stayed True through
                 # the failure and every later tick repeated it identically.
                 self._handshaked = False
                 raise PermissionError(
-                    f"still {response.status_code} after re-handshake — "
-                    "credentials or anti-bot posture may have changed"
+                    f"still {response.status_code} after re-handshake and an "
+                    "exit-IP rotation — credentials or anti-bot posture may "
+                    "have changed"
                 )
 
         if response.status_code != 200:

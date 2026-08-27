@@ -185,3 +185,44 @@ def test_a_dead_session_is_not_reused_forever():
         FakeResponse(200, {"items": [{"id": 1}]}),
     ]
     assert c.search(catalog_ids=3565) == [{"id": 1}]
+
+
+class TestExitRotation:
+    """A 403 that survives a re-handshake is an address block, not a session one.
+
+    handshake() clears cookies, but requests keeps the pooled TCP connection,
+    so the retry leaves from the same exit IP that was just refused. Behind the
+    rotating residential gateway a new connection means a new address --
+    measured: a 403 that survived a re-handshake cleared on the first attempt
+    from a fresh process, three times out of three.
+    """
+
+    def test_rotate_replaces_the_session(self):
+        client = VintedClient()
+        before = client.session
+        assert client.rotate() is True
+        assert client.session is not before
+        assert client._handshaked is False
+
+    def test_rotate_refuses_to_touch_an_injected_session(self):
+        """Rebuilding the caller's session, or a test's fake, is not this
+        class's decision to make."""
+        fake = FakeSession([])
+        client = VintedClient(session=fake)
+        assert client.rotate() is False
+        assert client.session is fake
+
+    def test_a_403_that_survives_the_rehandshake_still_raises(self):
+        """Rotation is gated off for an injected session, so this is the
+        no-rotation path: it must still fail loudly rather than return [].
+        """
+        session = FakeSession([
+            FakeResponse(200, text="homepage"),      # initial handshake
+            FakeResponse(403),                       # search
+            FakeResponse(200, text="homepage"),      # re-handshake
+            FakeResponse(403),                       # search again
+        ])
+        client = VintedClient(session=session)
+        with pytest.raises(PermissionError) as exc:
+            client.search(catalog_ids=2999)
+        assert "rotation" in str(exc.value)
