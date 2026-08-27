@@ -91,7 +91,9 @@ def test_network_lock_extracted():
 
 
 def test_unknown_make_returns_empty_spec():
-    spec = parse("Nokia 3310 classic")
+    """Nokia used to sit here; it is supported now. An unsupported make must
+    still yield an empty spec rather than a guess."""
+    spec = parse("Blackberry Curve 8520")
     assert spec.model is None
     assert spec.make is None
 
@@ -150,3 +152,92 @@ def test_unspaced_variants_normalised():
     assert parse("Samsung Galaxy s24ultra 256gb").model == "galaxy-s24-ultra"
     assert parse("Samsung Galaxy S21+ 128GB").model == "galaxy-s21-plus"
     assert parse("iphone 15promax").model == "iphone-15-pro-max"
+
+
+# --- the unresolved tail, measured live 2026-08-27 ---------------------------
+# Every title here was in the 18% the parser could not resolve.
+
+TAIL_CASES = [
+    # Samsung written without "samsung" or "galaxy" — my own matcher's gap,
+    # and the single biggest group in the tail.
+    ("S24 ultra 256GB",                     "samsung", "galaxy-s24-ultra", 256),
+    ("A55 5G",                              "samsung", "galaxy-a55",       None),
+    ("Z flip 5 256gb",                      "samsung", "galaxy-z-flip-5",  256),
+    # Google
+    ("Pixel 6a",                            "google",  "pixel-6a",         None),
+    ("Google pixel 10",                     "google",  "pixel-10",         None),
+    ("Google pixel 11 pro 5G 256GB AI sim-free olive phone",
+                                            "google",  "pixel-11-pro",     256),
+    # Motorola
+    ("Motorola g85",                        "motorola", "moto-g85",        None),
+    ("Motorola Moto G35 5G 128GB 4GB Ram Midnight Black",
+                                            "motorola", "moto-g35",        128),
+    ("Motorola Edge 30 Ultra 256GB 12GB Black",
+                                            "motorola", "edge-30-ultra",   256),
+    # Oppo
+    ("Oppo Find X9 Pro 16/512GB Titanium Charcoal",
+                                            "oppo",    "find-x9-pro",      512),
+    # Sony
+    ("Sony Xperia Z3",                      "sony",    "xperia-z3",        None),
+    # Nokia
+    ("Nokia 105 dualsim unlocked mobile phone",
+                                            "nokia",   "nokia-105",        None),
+]
+
+
+@pytest.mark.parametrize("title,make,model,storage", TAIL_CASES)
+def test_unresolved_tail_now_parses(title, make, model, storage):
+    spec = parse(title)
+    assert spec.make == make, f"make wrong for {title!r}"
+    assert spec.model == model, f"model wrong for {title!r}"
+    assert spec.storage_gb == storage, f"storage wrong for {title!r}"
+
+
+@pytest.mark.parametrize("title", [
+    "4x Sony Xperia Z3 BUNDLE",
+    "Job lot of 3 iPhones",
+    "iPhone 13 joblot spares",
+    "Bundle of 5 Samsung Galaxy S8",
+])
+def test_multi_item_lots_are_disqualified(title):
+    """A bundle is a different product at a different price. Letting one into a
+    bucket would drag the median and make single handsets look overpriced."""
+    assert "bundle" in parse(title).disqualifiers
+
+
+def test_bare_iphone_with_no_model_stays_unresolved():
+    """'iPhone' alone is genuinely unparseable — there is no model to price
+    against, so refusing is correct rather than a gap."""
+    assert parse("iPhone").model is None
+
+
+def test_makes_do_not_steal_each_others_titles():
+    """The bare-Samsung patterns are greedy, so every other make is checked
+    first. This pins that ordering."""
+    assert parse("Sony Xperia Z3").make == "sony"
+    assert parse("Motorola Edge 30 Ultra").make == "motorola"
+    assert parse("Google Pixel 8 Pro").make == "google"
+    assert parse("iPhone 13 Pro").make == "apple"
+    assert parse("Samsung Galaxy S24").make == "samsung"
+
+
+def test_bare_pro_max_infers_apple():
+    """Live title 'locked 17 pro max' never says iPhone. 'Pro Max' is Apple-only
+    naming, so a bare generation number plus it is safely an iPhone."""
+    assert parse("locked 17 pro max").model == "iphone-17-pro-max"
+    assert parse("locked 17 pro max").make == "apple"
+
+
+def test_bare_pro_max_never_steals_a_branded_title():
+    """The fallback runs last. Anything with a real brand token must be claimed
+    by its own matcher first."""
+    assert parse("Google pixel 11 pro 5G").make == "google"
+    assert parse("Oppo Find X9 Pro").make == "oppo"
+    assert parse("Samsung Galaxy S24 Ultra").make == "samsung"
+    assert parse("Motorola Edge 30 Ultra").make == "motorola"
+
+
+def test_bare_pro_alone_is_not_enough():
+    """Only 'pro max' is Apple-distinctive. Bare 'pro' is used by everyone, so
+    inferring from it would misfile other manufacturers into iPhone buckets."""
+    assert parse("15 pro").model is None

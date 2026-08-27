@@ -46,5 +46,5 @@ print(f"  rejected accessories  {accessories:3}  ({accessories/n:.0%})")
 print(f"  UNRESOLVED            {unknown:3}  ({unknown/n:.0%})   <- the LLM tail")
 print(f"\n  of those phones: {no_storage} lack storage ({no_storage/max(phones,1):.0%}), {disq} disqualified")
 print("\nUNRESOLVED titles:")
-for m in misses[:15]:
+for m in misses:
     print("   ", m[:74])

@@ -26,8 +26,13 @@ _APPLE_NUMBERS = [
 _APPLE_VARIANTS = ["pro max", "plus", "pro", "mini", "max", ""]
 
 # Samsung. Same longest-first hazard: an Ultra priced against the base bucket
-# looks like a steal. Sellers frequently drop either "samsung" or "galaxy" from
-# the title, so presence of either is enough to establish the make.
+# looks like a steal.
+#
+# These patterns are deliberately allowed to match WITHOUT "samsung" or "galaxy"
+# present — live titles like "S24 ultra 256GB", "A55 5G" and "Z flip 5 256gb"
+# were the largest single group the parser was missing. Bare "s24"/"a55" is only
+# safe because everything here arrives from the phones category; the greediness
+# is why Samsung is checked LAST in _MAKE_MATCHERS.
 _SAMSUNG_VARIANTS = ["ultra", "plus", "fe", ""]
 _SAMSUNG_SERIES = [
     # (regex for the series token, slug template)
@@ -36,6 +41,58 @@ _SAMSUNG_SERIES = [
     (r"\bnote\s*(\d{1,2})\b", "galaxy-note-{}"),
     (r"\bs(\d{1,2})\b", "galaxy-s{}"),
     (r"\ba(\d{1,3})\b", "galaxy-a{}"),
+]
+
+# Everything else is pure data: (make, brand tokens, series patterns, variants).
+# Adding a manufacturer means adding a row here and nothing else.
+_BRAND_RULES = [
+    ("google", ("pixel", "google"), [
+        (r"\bpixel\s*(\d{1,2}\s*a|\d{1,2})\b", "pixel-{}"),
+    ], ["pro xl", "pro", "xl"]),
+
+    ("motorola", ("motorola", "moto "), [
+        (r"\bedge\s*(\d{1,3})\b", "edge-{}"),
+        (r"\b(?:moto\s*)?g(\d{2,3})\b", "moto-g{}"),
+        (r"\brazr\s*(\d{2,4})\b", "razr-{}"),
+    ], ["ultra", "pro", "plus", "neo", "fusion"]),
+
+    ("oppo", ("oppo",), [
+        (r"\bfind\s*([xn]\d{1,2})\b", "find-{}"),
+        (r"\breno\s*(\d{1,2})\b", "reno-{}"),
+        (r"\b([xn]\d{1,2})\s*flip\b", "{}-flip"),
+    ], ["pro plus", "pro", "flip", "lite"]),
+
+    ("sony", ("sony", "xperia"), [
+        (r"\bxperia\s*([a-z]?\d{1,2}|1|5|10)\b", "xperia-{}"),
+    ], ["mark v", "iv", "v", "iii", "ii", "plus"]),
+
+    ("oneplus", ("oneplus", "one plus"), [
+        (r"\bone\s*plus\s*(\d{1,2})\b", "oneplus-{}"),
+    ], ["pro", "t", "r"]),
+
+    ("xiaomi", ("xiaomi", "redmi", "poco"), [
+        (r"\bredmi\s*note\s*(\d{1,2})\b", "redmi-note-{}"),
+        (r"\bredmi\s*(\d{1,2})\b", "redmi-{}"),
+        (r"\bpoco\s*([a-z]\d{1,2})\b", "poco-{}"),
+        (r"\bxiaomi\s*(\d{1,2})\b", "xiaomi-{}"),
+    ], ["pro plus", "pro", "ultra", "lite"]),
+
+    ("realme", ("realme", "real me"), [
+        (r"\breal\s*me\s*(gt|\d{1,2})\b", "realme-{}"),
+    ], ["pro", "master edition", "master"]),
+
+    ("honor", ("honor",), [
+        (r"\bhonor\s*(\d{1,3}[a-z]?)\b", "honor-{}"),
+    ], ["pro", "lite"]),
+
+    ("huawei", ("huawei",), [
+        (r"\bp(\d{1,2})\b", "huawei-p{}"),
+        (r"\bmate\s*(\d{1,2})\b", "huawei-mate-{}"),
+    ], ["pro", "lite"]),
+
+    ("nokia", ("nokia",), [
+        (r"\bnokia\s*(\d{1,4})\b", "nokia-{}"),
+    ], ["plus", "pro"]),
 ]
 
 # Capacities Apple has actually shipped. Anything else is noise, not storage.
@@ -70,6 +127,9 @@ _DISQUALIFIERS = [
     ("icloud_locked", r"icloud\s*lock|icloud\s*locked|find\s*my\s*(is\s*)?on|activation\s*lock|\bicloud\b"),
     ("damaged", r"\bcracked\b|\bsmashed\b|\bshattered\b|screen\s*burn|\bdamaged\b|\bchipped\b"),
     ("faulty", r"\bfaulty\b|\bnot\s*working\b|\bdoesn'?t\s*work\b|\bbroken\b|\bdead\b"),
+    # A bundle is a different product at a different price. One in a bucket
+    # drags the median and makes single handsets look overpriced.
+    ("bundle", r"\bbundle\b|\bjob\s*lot\b|\bjoblot\b|\bbulk\b|\b\d+\s*x\s+\w|\bx\d+\b"),
 ]
 
 _STORAGE_RE = re.compile(r"\b(\d{1,4})\s*(gb|tb)\b")
@@ -154,35 +214,68 @@ def _match_apple_model(text: str) -> str | None:
     return None
 
 
-def _match_samsung_model(text: str) -> str | None:
-    """Return a normalised Samsung model slug, or None.
+def _match_series(text: str, series, variants, brand_tokens=None) -> str | None:
+    """Shared series+variant matcher.
 
-    Either "samsung" or "galaxy" establishes the make — sellers routinely write
-    "Samsung s24 ultra" or "Galaxy Z Flip 4" and drop the other token.
+    Args:
+        series: (pattern, slug_template) pairs, most specific first.
+        variants: Suffixes to look for immediately after the series token,
+            longest first. A variant found anywhere else in the title is
+            ignored — "s24 ultra" and "ultra clean condition" must not look
+            the same.
+        brand_tokens: If given, at least one must appear or the make is not
+            claimed at all.
     """
-    if "samsung" not in text and "galaxy" not in text:
+    if brand_tokens and not any(t in text for t in brand_tokens):
         return None
-    for pattern, template in _SAMSUNG_SERIES:
+    for pattern, template in series:
         m = re.search(pattern, text)
         if not m:
             continue
-        base = template.format(m.group(1))
-        # Variant must appear after the series token, or "s24 ultra" and a
-        # stray "ultra" elsewhere in the title would be indistinguishable.
+        base = template.format(re.sub(r"\s+", "", m.group(1)))
         tail = text[m.end():]
-        for variant in _SAMSUNG_VARIANTS:
+        for variant in variants:
             if variant and re.match(rf"\s+{re.escape(variant)}\b", tail):
-                return f"{base}-{variant}"
+                return f"{base}-{variant.replace(' ', '-')}"
         return base
     return None
 
 
-# Tried in order. Adding a manufacturer means adding a matcher here and a table
-# above — no change to parse() itself.
-_MAKE_MATCHERS = [
-    ("apple", _match_apple_model),
-    ("samsung", _match_samsung_model),
-]
+def _match_samsung_model(text: str) -> str | None:
+    """Samsung, matched WITHOUT requiring a brand token — see _SAMSUNG_SERIES."""
+    return _match_series(text, _SAMSUNG_SERIES, _SAMSUNG_VARIANTS)
+
+
+def _match_bare_apple(text: str) -> str | None:
+    """Last-resort Apple match for titles that never say "iPhone".
+
+    "Pro Max" is an Apple-only naming convention — Samsung uses Ultra, Google
+    uses XL, Motorola uses Ultra. So a bare generation number followed by
+    "pro max", with no other make having claimed the title first, is safely
+    an iPhone. Live example: "locked 17 pro max".
+
+    Deliberately narrow: only "pro max", never bare "pro", which every
+    manufacturer uses.
+    """
+    m = re.search(r"\b(1[0-9]|[6-9])\s*pro\s*max\b", text)
+    return f"iphone-{m.group(1)}-pro-max" if m else None
+
+
+# Order matters. Apple first, then every brand-token-gated make, then the two
+# greedy fallbacks LAST: Samsung's patterns match bare "s24"/"a55", and the bare
+# Apple rule matches a naked generation number. Either would otherwise claim
+# titles belonging to another manufacturer.
+_MAKE_MATCHERS = (
+    [("apple", _match_apple_model)]
+    + [
+        (make, (lambda t, s=series, v=variants, b=tokens: _match_series(t, s, v, b)))
+        for make, tokens, series, variants in _BRAND_RULES
+    ]
+    + [
+        ("samsung", _match_samsung_model),
+        ("apple", _match_bare_apple),
+    ]
+)
 
 
 def _match_model(text: str) -> tuple[str, str] | None:
