@@ -26,11 +26,12 @@ def test_result_cap_unknown_source_raises():
 
 
 def test_is_saturated_per_source_guard():
-    """The same raw count of 900 unique items is saturated for Vinted (94% of
-    960 = 902.4, so 900 falls just short... use a clearer margin) but not for
-    eBay (94% of 10,000 = 9,400). This is the "cap is per source" guard from
-    spec section 11: a naive is_saturated that ignored its source argument
-    would call 900 saturated either way, or unsaturated either way.
+    """The same raw count of 910 unique items is saturated for Vinted (the
+    threshold is 94% of 960 == 902.4, i.e. 903 and up) but not for eBay
+    (94% of 10,000 == 9,400, and 910 is nowhere close). This is the "cap is
+    per source" guard from spec section 11: a naive is_saturated that
+    ignored its source argument would call 910 saturated either way, or
+    unsaturated either way.
     """
     assert catalog.is_saturated(910, "vinted") is True
     assert catalog.is_saturated(910, "ebay") is False

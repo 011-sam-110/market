@@ -143,9 +143,11 @@ def empty_row(source: str, source_id: str) -> dict:
     key and an explicit `None` look identical to `dict.get`. Building from
     this instead makes every column exist from the start, so "I forgot to
     fill listed_at" is a visible `row["listed_at"] is None` rather than a key
-    that was simply never there. `source` and `source_id` are the two
-    columns that are never NULL for a real row, so they are the two this
-    function actually fills.
+    that was simply never there. `source` and `source_id` are the two the
+    caller must supply here -- the other never-NULL columns (`seen_at`,
+    `available`, `content_hash`) are filled later, by the store rather than
+    the transport (contracts section 1.1), so they stay NULL on the row this
+    function returns.
     """
     row: dict = {name: None for name in ROW_FIELDS}
     row["source"] = source
@@ -360,7 +362,7 @@ class MarketStore:
         if not self._has_data():
             return []
         rows = self.sql(f"""
-            SELECT DISTINCT seen_at::DATE AS d FROM market
+            SELECT DISTINCT (seen_at AT TIME ZONE 'UTC')::DATE AS d FROM market
             WHERE source = '{source}' ORDER BY d
         """).fetchall()
         return [r[0] for r in rows]
@@ -384,7 +386,8 @@ class MarketStore:
                     PARTITION BY source_id ORDER BY seen_at DESC
                 ) AS rn
                 FROM market
-                WHERE source = '{source}' AND seen_at::DATE = DATE '{day_str}'
+                WHERE source = '{source}'
+                  AND (seen_at AT TIME ZONE 'UTC')::DATE = DATE '{day_str}'
             ) WHERE rn = 1
         """)
         return [dict(zip(rel.columns, row)) for row in rel.fetchall()]

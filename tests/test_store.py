@@ -176,8 +176,24 @@ def market_store(tmp_path):
 
 
 def test_row_fields_has_37_entries_matching_schema_names_in_order():
+    # `ROW_FIELDS == tuple(SCHEMA.names)` alone is tautological -- ROW_FIELDS
+    # is *defined* as tuple(SCHEMA.names) in market_store.py, so that
+    # assertion can never fail on its own. Pin the actual expected order
+    # from contracts section 1.1 (21 existing columns, unchanged, then the
+    # 16 new ones in the order the contract lists them) so a column that
+    # gets silently reordered or renamed is caught here.
     assert len(ROW_FIELDS) == 37
     assert ROW_FIELDS == tuple(SCHEMA.names)
+    assert ROW_FIELDS == (
+        "source", "source_id", "seen_at", "category", "shard", "title",
+        "price_pence", "total_pence", "currency", "condition", "brand",
+        "model", "storage_gb", "grade", "kind", "available", "region",
+        "seller_id", "url", "extra", "content_hash",
+        "sold_qty", "qty_available", "seller_type", "seller_feedback_bp",
+        "seller_feedback_n", "listed_at", "epid", "gtin", "mpn",
+        "identity_tier", "origin_country", "promoted", "leaf_category_id",
+        "eta_days", "store_joined", "store_items_sold",
+    )
 
 
 def test_empty_row_produces_every_row_fields_key():
@@ -201,6 +217,9 @@ def test_ebay_same_sold_qty_writes_two_rows_snapshot_semantics_guard(market_stor
     market_store.record([ebay_row(sold_qty=5)])
     written = market_store.record([ebay_row(sold_qty=5)])
     assert written == 1, "the second identical eBay observation must still be written"
+    assert len(market_store.since(days=1, source="ebay")) == 2, (
+        "both observations must actually be queryable, not just counted"
+    )
 
 
 def test_vinted_same_content_writes_one_row(market_store):
@@ -258,6 +277,13 @@ def test_content_hash_is_stable_over_the_hashed_fields():
     b = ebay_row(sold_qty=3)
     assert market_content_hash(a) == market_content_hash(b)
 
+    # An UN-hashed field (view/favourite counts, stored in `extra`) must not
+    # move the hash -- that is the entire point of _HASHED excluding it.
+    b["extra"] = '{"view_count": 999}'
+    assert market_content_hash(a) == market_content_hash(b), (
+        "a field outside _HASHED changed the hash"
+    )
+
 
 def test_snapshot_dates_lists_days_with_at_least_one_ebay_row(market_store):
     day1 = _datetime(2026, 8, 20, 10, 0, tzinfo=_UTC)
@@ -285,6 +311,29 @@ def test_rows_on_returns_newest_observation_per_listing(market_store):
     rows = market_store.rows_on(_date(2026, 8, 20), source="ebay")
     assert len(rows) == 1
     assert rows[0]["sold_qty"] == 4
+
+
+def test_snapshot_dates_and_rows_on_split_a_midnight_straddle_in_utc(market_store):
+    """Timezone guard: both queries must bucket by UTC date, never the
+    DuckDB session timezone. A naive `seen_at::DATE` evaluates in
+    whatever local timezone the box is set to (Europe/London on this
+    machine, which is UTC+1 under BST) and would merge these two rows
+    into the wrong single day -- the write path already partitions on
+    disk by `seen_at.strftime("%Y-%m-%d")` in UTC, so the read path
+    disagreeing with it silently hides or double-counts an observation
+    across every midnight while BST is in effect."""
+    late = ebay_row(source_id="late", sold_qty=1)
+    late["seen_at"] = _datetime(2026, 8, 20, 23, 59, tzinfo=_UTC)
+    early = ebay_row(source_id="early", sold_qty=1)
+    early["seen_at"] = _datetime(2026, 8, 21, 0, 1, tzinfo=_UTC)
+    market_store.record([late, early])
+
+    assert market_store.snapshot_dates("ebay") == [_date(2026, 8, 20), _date(2026, 8, 21)]
+
+    day1 = market_store.rows_on(_date(2026, 8, 20), source="ebay")
+    day2 = market_store.rows_on(_date(2026, 8, 21), source="ebay")
+    assert [r["source_id"] for r in day1] == ["late"]
+    assert [r["source_id"] for r in day2] == ["early"]
 
 
 def test_always_snapshot_sources_contains_only_ebay():

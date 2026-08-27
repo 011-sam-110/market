@@ -73,24 +73,25 @@ def test_fvf_bp_unknown_leaf_falls_to_everything_else():
 def test_fvf_bp_resolves_through_the_full_chain(monkeypatch):
     """Exercises leaf -> top_level_of -> TOP_LEVEL_ID_TO_NAME -> rate table.
 
-    The ids used here ("9355", "139971") are test-local fixture values that
-    exist only for the duration of this test (monkeypatch reverts them) --
-    they are never present in the shipped TOP_LEVEL_ID_TO_NAME, which ships
-    empty because no id in it has been read off a real eBay page (see the
-    module docstring and unverified[] in this stream's report). This tests
-    the traversal logic, not eBay's real category tree.
+    The ids used here ("TEST-TOP-PHONES", "TEST-LEAF-PHONES") are deliberately
+    unlike any real eBay category id, so nobody could mistake them for real
+    data and copy them into the shipped TOP_LEVEL_ID_TO_NAME by accident --
+    it ships empty because no id in it has been read off a real eBay page
+    (see the module docstring and unverified[] in this stream's report).
+    monkeypatch reverts the fixture after the test. This tests the
+    traversal logic, not eBay's real category tree.
     """
-    monkeypatch.setitem(fees.TOP_LEVEL_ID_TO_NAME, "9355",
+    monkeypatch.setitem(fees.TOP_LEVEL_ID_TO_NAME, "TEST-TOP-PHONES",
                          "Mobile Phones & Communication")
-    top_level_of = {"139971": "9355"}
-    assert fees.fvf_bp("139971", top_level_of=top_level_of) == 990
+    top_level_of = {"TEST-LEAF-PHONES": "TEST-TOP-PHONES"}
+    assert fees.fvf_bp("TEST-LEAF-PHONES", top_level_of=top_level_of) == 990
 
 
 def test_fvf_bp_leaf_missing_from_top_level_of_falls_to_everything_else(monkeypatch):
-    monkeypatch.setitem(fees.TOP_LEVEL_ID_TO_NAME, "9355",
+    monkeypatch.setitem(fees.TOP_LEVEL_ID_TO_NAME, "TEST-TOP-PHONES",
                          "Mobile Phones & Communication")
-    top_level_of = {"other-leaf": "9355"}
-    assert fees.fvf_bp("139971", top_level_of=top_level_of) == fees.EVERYTHING_ELSE_BP
+    top_level_of = {"other-leaf": "TEST-TOP-PHONES"}
+    assert fees.fvf_bp("TEST-LEAF-PHONES", top_level_of=top_level_of) == fees.EVERYTHING_ELSE_BP
 
 
 def test_fvf_bp_unknown_category_charges_worst_rate_not_cheapest():
@@ -123,9 +124,9 @@ def test_worked_example_mobile_phones_30_pounds(monkeypatch):
     target = max(bp(3000, 2500), 600) = max(750, 600) = 750.
     max_cost = 3000 - 418 - 750 = 1832.
     """
-    monkeypatch.setitem(fees.TOP_LEVEL_ID_TO_NAME, "9355",
+    monkeypatch.setitem(fees.TOP_LEVEL_ID_TO_NAME, "TEST-TOP-PHONES",
                          "Mobile Phones & Communication")
-    top_level_of = {"leaf-phones": "9355"}
+    top_level_of = {"leaf-phones": "TEST-TOP-PHONES"}
     assert fees.fees(3000, "leaf-phones", DEFAULT_KNOBS, top_level_of=top_level_of) == 418
     assert fees.max_cost(3000, "leaf-phones", DEFAULT_KNOBS, top_level_of=top_level_of) == 1832
 
@@ -155,8 +156,8 @@ def test_worked_example_home_furniture_diy_10_pounds(monkeypatch):
     target = max(bp(1000, 2500), 600) = max(250, 600) = 600.
     max_cost = 1000 - 184 - 600 = 216.
     """
-    monkeypatch.setitem(fees.TOP_LEVEL_ID_TO_NAME, "11450", "Home, Furniture & DIY")
-    top_level_of = {"leaf-hfd": "11450"}
+    monkeypatch.setitem(fees.TOP_LEVEL_ID_TO_NAME, "TEST-TOP-HFD", "Home, Furniture & DIY")
+    top_level_of = {"leaf-hfd": "TEST-TOP-HFD"}
     assert fees.fees(1000, "leaf-hfd", DEFAULT_KNOBS, top_level_of=top_level_of) == 184
     assert fees.max_cost(1000, "leaf-hfd", DEFAULT_KNOBS, top_level_of=top_level_of) == 216
 

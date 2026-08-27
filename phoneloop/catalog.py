@@ -181,7 +181,8 @@ def leaves_of(tree: list[dict], root_id: int) -> list[tuple[int, str]]:
 def result_cap(source: str) -> int:
     """The result cap for one source. Unknown source raises KeyError rather
     than silently guessing Vinted's -- a wrong guess for a new source would
-    stop a sweep 89x early (960 vs eBay's 10,000) and nobody would notice."""
+    stop a sweep at roughly 1/10th of its real cap (960 vs eBay's 10,000,
+    i.e. missing about 90% of the results) and nobody would notice."""
     return RESULT_CAPS[source]
 
 
