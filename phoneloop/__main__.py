@@ -41,7 +41,7 @@ def cmd_collect(args, cfg):
     """
     cfg = config.load(env={**_env_from(cfg), "PHONELOOP_ALERTS_ENABLED": "0"})
     watcher = _build(cfg)
-    print(f"collect mode — alerts disabled, writing to {cfg.DATA_DIR}")
+    print(f"collect mode - alerts disabled, writing to {cfg.DATA_DIR}")
 
     stop = threading.Event()
     signal.signal(signal.SIGINT, lambda *_: stop.set())
@@ -80,7 +80,7 @@ def cmd_stats(args, cfg):
     print(f"{len(observations)} observations in the last {cfg.PRICE_WINDOW_DAYS} days")
     print(f"{n} buckets at or above {cfg.MIN_BUCKET_SAMPLES} samples\n")
     if not rows:
-        print("No priceable buckets yet. Run 'collect' for a few days first —")
+        print("No priceable buckets yet. Run 'collect' for a few days first -")
         print("a reference built on fewer samples is worse than no reference.")
         return
 

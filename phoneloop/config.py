@@ -88,7 +88,15 @@ def load(env: dict[str, str] | None = None) -> Config:
         TELEGRAM_TOKEN=e.get("PHONELOOP_TELEGRAM_TOKEN", ""),
         TELEGRAM_CHAT_ID=e.get("PHONELOOP_TELEGRAM_CHAT_ID", ""),
         ALERTS_ENABLED=e.get("PHONELOOP_ALERTS_ENABLED", "1") == "1",
-        DATA_DIR=Path(e.get("PHONELOOP_DATA_DIR", "data")),
+        # Deliberately OUTSIDE the repo, and outside OneDrive.
+        #
+        # This project lives under OneDrive\Desktop, and OneDrive takes file
+        # handles to sync whatever appears beneath it. A collector writing
+        # parquet every couple of minutes then loses a race with the sync
+        # client and dies on "the process cannot access the file because it is
+        # being used by another process" — which it did, silently, before this
+        # default was moved.
+        DATA_DIR=Path(e.get("PHONELOOP_DATA_DIR", str(Path.home() / ".phoneloop" / "data"))),
         # Hard ceiling so a runaway loop can never eat the shared Drive quota
         # that the EV client's backups depend on. 20 GB is far above this
         # milestone's expected footprint of a few GB a year.

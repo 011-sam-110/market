@@ -1,4 +1,8 @@
 requests>=2.32
 duckdb>=1.0
+# duckdb needs pytz to convert TIMESTAMPTZ values back to Python. Without it
+# every read raises InvalidInputException. It is only present by accident on
+# machines that have pandas, so it must be declared explicitly.
+pytz>=2024.1
 pyarrow>=15.0
 pytest>=8.0
