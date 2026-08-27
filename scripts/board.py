@@ -16,13 +16,19 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from phoneloop import config, spread  # noqa: E402
 from phoneloop.parser import parse  # noqa: E402
+from phoneloop.verifier import extract_description  # noqa: E402
 from phoneloop.vinted_client import VintedClient  # noqa: E402
+
+# Vinted 429s after roughly five listing pages in twenty seconds. This is the
+# measured trickle rate, not a guess, and it is why verification is capped.
+PROBE_SPACING_S = 22
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -51,11 +57,25 @@ def cex_cash(table: dict, model: str, storage_gb: int | None,
     return None
 
 
-def ebay_ceiling(table: dict, model: str, storage_gb: int | None) -> int | None:
+def ebay_ceiling(table: dict, model: str,
+                 storage_gb: int | None) -> tuple[int | None, bool]:
+    """Returns (ceiling, exact). `exact` is False for a capacity-mixed figure.
+
+    The direction of the error matters and runs opposite to CeX. A model-wide
+    CeX price is the cheapest capacity CeX stocks, so it UNDERstates the exit --
+    safe. A model-wide eBay median pools 128GB with 512GB, so for a base-
+    capacity handset it OVERstates the exit, which is the direction that loses
+    money. It is still worth showing, but never silently: the board marks it.
+    """
     for entry in table.values():
         if entry.get("model") == model and entry.get("storage_gb") == storage_gb:
-            return entry.get("ceiling_pence")
-    return None
+            # Both sides None is not a match, it is two unknowns agreeing.
+            # Calling that exact would hide the widest uncertainty on the board.
+            return entry.get("ceiling_pence"), storage_gb is not None
+    for entry in table.values():
+        if entry.get("model") == model and entry.get("storage_gb") is None:
+            return entry.get("ceiling_pence"), False
+    return None, False
 
 
 def main() -> int:
@@ -65,6 +85,8 @@ def main() -> int:
     ap.add_argument("--private", action="store_true",
                     help="assume a fee-free private eBay account - VERIFY FIRST")
     ap.add_argument("--limit", type=int, default=25)
+    ap.add_argument("--verify", type=int, default=8, metavar="N",
+                    help="inspect the top N listings' descriptions (0 to skip)")
     args = ap.parse_args()
 
     cfg = config.load()
@@ -99,37 +121,98 @@ def main() -> int:
             continue
         buy_pence = round(float(buy) * 100)
 
+        ceiling, exact = ebay_ceiling(ebay_table, spec.model, spec.storage_gb)
         s = spread.evaluate(
             buy_pence,
             cex_cash(cex_table, spec.model, spec.storage_gb, args.grade),
-            ebay_ceiling(ebay_table, spec.model, spec.storage_gb),
+            ceiling,
             fees=fees,
         )
         if s is None:
             unpriceable += 1
             continue
-        rows.append((s, spec, it))
+        rows.append((s, spec, it, exact))
 
     rows.sort(key=lambda r: r[0].margin_pence, reverse=True)
 
+    # Verify before presenting. A title tells you almost nothing about whether
+    # a handset is sellable: of the four best-looking margins ever found by
+    # this project, four were traps, and every one of them was declared in the
+    # description while the title stayed clean. A board that ranks on titles
+    # alone ranks traps to the top by construction, because the cheapest
+    # listing for a given model is usually cheap for a reason.
+    rejected = []
+    unverified = set()
+    if args.verify:
+        client = VintedClient()
+        client.handshake()          # listing pages 403 without the cookie set
+        checked = 0
+        for row in list(rows[:args.verify]):
+            _, spec, it, _ = row
+            url = it.get("url")
+            if not url:
+                continue
+            if checked:
+                time.sleep(PROBE_SPACING_S)
+            checked += 1
+            try:
+                resp = client.session.get(url, timeout=30)
+                if resp.status_code != 200:
+                    print(f"  ? {url} -> HTTP {resp.status_code}")
+                    unverified.add(id(row))
+                    continue
+                desc = extract_description(resp.text)
+            except Exception as exc:                     # noqa: BLE001
+                print(f"  ? could not inspect {url}: {str(exc)[:60]}")
+                unverified.add(id(row))
+                continue
+            full = parse(it.get("title", ""), desc)
+            if full.disqualifiers:
+                rows.remove(row)
+                rejected.append((row, full.disqualifiers, desc))
+
     print(f"{len(items)} live  |  {disqualified} disqualified  |  "
           f"{unpriceable} no priceable exit  |  {len(rows)} on the board\n")
+
+    if rejected:
+        print(f"{len(rejected)} of the top {args.verify} rejected on "
+              "inspection - the title said nothing:")
+        print()
+        for (sp, spec, it, _), why, desc in rejected:
+            print(f"  £{sp.buy_pence/100:>7.0f}  {spec.model:<18} "
+                  f"{','.join(why)}")
+            print(f"           \"{desc[:76]}\"")
+        print()
 
     covered = [r for r in rows if r[0].downside_covered]
     print(f"{len(covered)} of {len(rows)} clear the guaranteed floor "
           "(the only ones that cannot lose)\n")
 
-    hdr = f"{'buy':>8} {'exit':>8} {'net':>8} {'margin':>8} {'floor':>8}  safe  handset"
+    hdr = (f"{'buy':>8} {'exit':>8} {'net':>8} {'margin':>8} {'floor':>8}"
+           "  safe  handset")
     print(hdr)
     print("-" * len(hdr))
-    for s, spec, it in rows[:args.limit]:
+    for row in rows[:args.limit]:
+        s, spec, it, exact = row
         fm = s.floor_margin_pence
+        mark = "" if exact or s.best.venue != "ebay" else " ~"
+        if id(row) in unverified:
+            mark += " ?"
         print(f"£{s.buy_pence/100:>7.0f} {s.best.venue:>8} "
               f"£{s.best.net_pence/100:>7.0f} "
               f"£{s.margin_pence/100:>7.0f} "
               f"{('£%.0f' % (fm/100)) if fm is not None else '   -':>8}  "
               f"{'YES ' if s.downside_covered else 'no  '}  "
-              f"{spec.model} {spec.storage_gb or '?'}GB")
+              f"{spec.model} {spec.storage_gb or '?'}GB{mark}")
+    if unverified:
+        print()
+        print("  ? description could not be read, so this row is UNVERIFIED -")
+        print("    every trap found so far was invisible in the title.")
+    if any(not e and s.best.venue == "ebay" for s, _, _, e in rows[:args.limit]):
+        print()
+        print("  ~ eBay ceiling is capacity-mixed, so it OVERSTATES a "
+              "base-capacity handset.")
+        print("    Treat those margins as an upper bound, not a target.")
     return 0
 
 

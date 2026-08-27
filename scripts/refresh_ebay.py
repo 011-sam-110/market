@@ -150,7 +150,12 @@ def main() -> int:
                 time.sleep(PAUSE_S * 3)
                 continue
 
-            ceiling = retail_ceiling(listings, storage_gb=storage)
+            # Narrow to the exact model using eBay's own catalogue line. A
+            # search for "iphone 13" also returns the mini, the Pro and the
+            # Pro Max, and pooling them yields a median that describes no
+            # actual handset.
+            want = None if args.query else model
+            ceiling = retail_ceiling(listings, storage_gb=storage, model=want)
             sat = saturation(listings)
             table[text] = {
                 "model": model if not args.query else None,
@@ -158,11 +163,13 @@ def main() -> int:
                 "ceiling_pence": ceiling.median_pence if ceiling else None,
                 "mad_pence": ceiling.mad_pence if ceiling else None,
                 "samples": ceiling.samples if ceiling else 0,
+                "variant_excluded": ceiling.variant_excluded if ceiling else 0,
                 "saturation": sat,
                 "refreshed": datetime.now(UTC).isoformat(),
             }
             shown = (f"median £{ceiling.median_pence/100:.0f} "
-                     f"(n={ceiling.samples})" if ceiling else "too few UK comps")
+                     f"(n={ceiling.samples}, -{ceiling.variant_excluded} variant)"
+                     if ceiling else "too few UK comps after filtering")
             print(f"  {text:<30} {sat['live_listings']:>3} live "
                   f"({sat['overseas_listings']:>2} overseas)  {shown}")
             time.sleep(PAUSE_S)

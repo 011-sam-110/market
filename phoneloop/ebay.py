@@ -39,6 +39,8 @@ import re
 import statistics
 from dataclasses import dataclass, field
 
+from phoneloop.parser import parse as _parse_model
+
 _PRICE_RE = re.compile(r"£\s*([\d,]+\.\d{2})")
 _DELIVERY_RE = re.compile(r"\+\s*£\s*([\d,]+\.\d{2})\s*(?:delivery|postage)", re.I)
 _FREE_RE = re.compile(r"\bfree\b.{0,24}\b(?:delivery|postage)", re.I)
@@ -93,6 +95,24 @@ class EbayListing:
     @property
     def is_uk(self) -> bool:
         return not self.ships_from
+
+    @property
+    def catalogue_model(self) -> str | None:
+        """The model slug from eBay's OWN catalogue match, not the title.
+
+        A search for "iphone 13" returns 13 mini, 13 Pro and 13 Pro Max as
+        well, and a Pro Max is worth two to three times a mini. Pooling them
+        produces a median that describes no actual handset. This is the field
+        that lets the pool be narrowed to one model.
+
+        None when eBay showed no catalogue line, which is most of the page --
+        only about a third of rows carry one.
+        """
+        for part in self.aspects[1:]:
+            slug = _parse_model(part).model
+            if slug:
+                return slug
+        return None
 
     @property
     def is_used(self) -> bool:
@@ -177,10 +197,12 @@ class Ceiling:
     samples: int
     overseas_excluded: int
     unpriceable_excluded: int
+    variant_excluded: int = 0
 
 
 def retail_ceiling(listings, storage_gb: int | None = None,
-                   used_only: bool = True) -> Ceiling | None:
+                   used_only: bool = True,
+                   model: str | None = None) -> Ceiling | None:
     """Median landed asking price of comparable UK listings.
 
     Median and MAD rather than mean and standard deviation, as everywhere else
@@ -192,6 +214,14 @@ def retail_ceiling(listings, storage_gb: int | None = None,
     """
     overseas = sum(1 for x in listings if not x.is_uk)
     pool = [x for x in listings if x.is_uk]
+    variant = 0
+    if model is not None:
+        # Keep only rows eBay itself catalogued as this exact model. Rows with
+        # no catalogue line are dropped rather than assumed to match: an
+        # uncatalogued row is unknown, and a ceiling is not the place to guess.
+        before = len(pool)
+        pool = [x for x in pool if x.catalogue_model == model]
+        variant = before - len(pool)
     if used_only:
         pool = [x for x in pool if x.is_used]
     if storage_gb is not None:
@@ -210,6 +240,7 @@ def retail_ceiling(listings, storage_gb: int | None = None,
         samples=len(landed),
         overseas_excluded=overseas,
         unpriceable_excluded=unpriceable,
+        variant_excluded=variant,
     )
 
 

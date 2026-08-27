@@ -60,6 +60,13 @@ Pre-owned · Apple iPhone 13 · Unlocked · 128 GB
 Postage not specified
 someone_2024 98% positive (12)"""
 
+# About two thirds of a live results page looks like this: a real listing with
+# a real price and no catalogue match line at all.
+NO_ASPECTS = """Apple iPhone 13 maybe 128gb see photos
+Opens in a new window or tab
+£200.00
+Free postage"""
+
 FREE_POST = """Apple iPhone 13 128GB Starlight Unlocked
 Opens in a new window or tab
 Pre-owned · Apple iPhone 13 · Unlocked · 128 GB
@@ -184,6 +191,65 @@ class TestCeiling:
                         storage_gb=128)
         ]
         assert retail_ceiling(pool, storage_gb=128).median_pence == 21500
+
+
+class TestVariantContamination:
+    """A search for "iphone 13" returns the mini, the Pro and the Pro Max.
+
+    This is not a rare edge: the live "iphone 13" page returned 88 listings
+    and the resulting unfiltered median sat 6.63 pounds from the iPhone 12's,
+    which is not a credible gap between two generations. It was variant
+    contamination, and it would have priced every buy on the board.
+    """
+
+    def test_it_reads_the_model_from_ebays_own_catalogue_line(self):
+        assert parse_row(UK_USED).catalogue_model == "iphone-13"
+        assert parse_row(UK_WATCHED).catalogue_model == "iphone-13-mini"
+
+    def test_no_catalogue_line_means_unknown_not_a_guess(self):
+        row = parse_row(NO_ASPECTS)
+        assert row.catalogue_model is None
+        assert row.price_pence == 20000, "the row is otherwise perfectly usable"
+
+    def test_a_mini_does_not_price_a_standard(self):
+        pool = [
+            EbayListing(f"iPhone 13 {i}", 21000 + i * 500, 0,
+                        condition="Pre-owned",
+                        aspects=("Pre-owned", "Apple iPhone 13", "128 GB"),
+                        storage_gb=128)
+            for i in range(5)
+        ] + [
+            EbayListing("iPhone 13 mini", 9000, 0, condition="Pre-owned",
+                        aspects=("Pre-owned", "Apple iPhone 13 mini", "128 GB"),
+                        storage_gb=128)
+        ]
+        c = retail_ceiling(pool, storage_gb=128, model="iphone-13")
+        assert c.variant_excluded == 1
+        assert c.samples == 5
+        assert c.median_pence == 22000, "the mini must not drag the median"
+
+    def test_uncatalogued_rows_are_dropped_when_a_model_is_demanded(self):
+        """Roughly two thirds of a live page has no catalogue line. Assuming
+        those match would readmit exactly the contamination this prevents."""
+        pool = [
+            EbayListing(f"iPhone 13 {i}", 21000, 0, condition="Pre-owned",
+                        aspects=("Pre-owned", "Apple iPhone 13"), storage_gb=128)
+            for i in range(4)
+        ] + [
+            EbayListing("no aspects", 5000, 0, condition="Pre-owned",
+                        storage_gb=128)
+        ]
+        c = retail_ceiling(pool, storage_gb=128, model="iphone-13")
+        assert c.variant_excluded == 1
+        assert c.samples == 4
+
+    def test_without_a_model_nothing_is_excluded(self):
+        """Back-compatible: the filter only applies when asked for."""
+        pool = [
+            EbayListing(f"x{i}", 20000, 0, condition="Pre-owned", storage_gb=128)
+            for i in range(4)
+        ]
+        assert retail_ceiling(pool, storage_gb=128).variant_excluded == 0
 
 
 class TestSaturation:
