@@ -44,10 +44,15 @@ def main() -> int:
         catalog_ids=cfg.CATALOG_ID, per_page=96, price_from=cfg.PRICE_FROM
     )
     scored = [(it, parse(it.get("title", ""))) for it in items]
-    residue = [(it, s) for it, s in scored if needs_vision(s)]
+    # Skip anything already disqualified. Vision costs money per call, and a
+    # listing titled "4x Sony Xperia Z3 BUNDLE" is not going to become buyable
+    # once a model has confirmed what it is.
+    binned = [(it, sp) for it, sp in scored if sp.disqualifiers]
+    residue = [(it, sp) for it, sp in scored
+               if not sp.disqualifiers and needs_vision(sp)]
 
     no_model = sum(1 for _, s in residue if s.model is None)
-    print(f"{len(items)} live listings")
+    print(f"{len(items)} live listings  ({len(binned)} disqualified, not sent)")
     print(f"{len(residue)} need vision  "
           f"({no_model} with no model at all, "
           f"{len(residue) - no_model} missing only storage)")
