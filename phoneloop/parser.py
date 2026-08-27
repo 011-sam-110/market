@@ -124,7 +124,42 @@ _ACCESSORY_PATTERNS = [
 # (canonical name, pattern). Order is irrelevant — all are scanned.
 _DISQUALIFIERS = [
     ("spares_repair", r"spares?\s*(or|and|&|/)?\s*repair|for\s*parts|\bparts only\b|\bspares\b"),
-    ("icloud_locked", r"icloud\s*lock|icloud\s*locked|find\s*my\s*(is\s*)?on|activation\s*lock|\bicloud\b"),
+    # An activation-locked handset is worth close to nothing and CeX will not
+    # take it, so this is the most expensive thing the parser can miss.
+    #
+    # Keying on the word "icloud" was not enough. A live listing read "Locked
+    # and I don't know the password but would be good once gets unlocked by
+    # professional" -- an activation lock described without ever using the term,
+    # which the verifier passed as fine at the best apparent margin on the board.
+    # So the rules below describe the *situation*, not the vocabulary.
+    #
+    # The negative lookbehinds and lookahead carry equal weight: "no icloud" and
+    # "icloud removed" are sellers saying the phone is CLEAN, and treating them
+    # as locks would mute most of the good listings in the feed. Note that
+    # \blocked\b cannot match inside "unlocked", which is what makes the
+    # bare-"locked" clauses safe.
+    ("activation_locked", (
+        r"(?<!no )(?<!not )\bicloud\b(?!\s*(removed|cleared|free|off|"
+        r"signed\s*out|logged\s*out|unlocked))"
+        r"|activation\s*lock"
+        r"|find\s*my\s*(iphone\s*)?(is\s*)?on"
+        r"|apple\s*id\s*(lock|password)"
+        r"|(don'?t|dont|do\s*not|doesn'?t)\s*know\s*(the\s*)?(password|passcode|pin|apple\s*id)"
+        r"|forgot(ten)?\s*(the\s*)?(password|passcode|pin|apple\s*id)"
+        r"|locked\s*to\s*(a\s*|the\s*)?(previous|old|last)\s*owner"
+        r"|previous\s*owner'?s?\s*(icloud|apple\s*id|account)"
+        r"|needs?\s*unlock"
+        r"|\bdisabled\b"
+        r"|\blocked\b.{0,40}(password|passcode|\bpin\b)"
+    )),
+    # A barred IMEI is unsellable through any legitimate channel. "not
+    # blacklisted" is a clean-stock claim, so it must not trip this.
+    ("blacklisted", (
+        r"(?<!not )(?<!never )\bblacklist(ed)?\b"
+        r"|imei\s*(is\s*)?(blocked|barred|blacklisted)"
+        r"|\bbarred\b"
+        r"|reported\s*(lost|stolen)"
+    )),
     ("damaged", r"\bcracked\b|\bsmashed\b|\bshattered\b|screen\s*burn|\bdamaged\b|\bchipped\b"),
     ("faulty", r"\bfaulty\b|\bnot\s*working\b|\bdoesn'?t\s*work\b|\bbroken\b|\bdead\b"),
     # A bundle is a different product at a different price. One in a bucket

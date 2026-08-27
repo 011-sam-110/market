@@ -58,7 +58,7 @@ def test_accessories_rejected(title):
 def test_icloud_lock_found_in_description_only():
     """The worst disqualifier rarely appears in the title. Missing it buys a brick."""
     spec = parse("iPhone 13 128GB Excellent", description="Great phone but it is iCloud locked, sold as seen")
-    assert "icloud_locked" in spec.disqualifiers
+    assert "activation_locked" in spec.disqualifiers
 
 
 @pytest.mark.parametrize("text,expected", [
@@ -66,7 +66,7 @@ def test_icloud_lock_found_in_description_only():
     ("iPhone 13 for parts only", "spares_repair"),
     ("iPhone 13, cracked screen", "damaged"),
     ("iPhone 13 faulty battery", "faulty"),
-    ("iPhone 13 - Find My is on", "icloud_locked"),
+    ("iPhone 13 - Find My is on", "activation_locked"),
 ])
 def test_each_disqualifier_detected(text, expected):
     assert expected in parse(text).disqualifiers

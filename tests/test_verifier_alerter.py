@@ -18,12 +18,19 @@ from phoneloop.verifier import count_photos, extract_description, verify
 
 CFG = config.load(env={"PHONELOOP_TELEGRAM_TOKEN": "t", "PHONELOOP_TELEGRAM_CHAT_ID": "c"})
 
-# Shape taken from a real Vinted page, 2026-08-27.
+# Claimed to be "taken from a real Vinted page" but the image URLs were
+# invented: no /t/<id>/ path segment, and sat behind a "url" JSON key. A real
+# page carries photos as HTML src/srcset attributes with that segment, so the
+# photo counter this fixture kept green scored zero on every live listing.
+# Corrected against an actual page, 2026-08-27.
 REAL_PAGE = (
     '<html><script>{"item":{"id":9791770344,'
-    '"description":"Iphone 14 midnight black\\nDm for questions\\nOffers accepted",'
-    '"photos":[{"url":"https://images1.vinted.net/a.jpg"},'
-    '{"url":"https://images2.vinted.net/b.jpg"}]}}</script></html>'
+    '"description":"Iphone 14 midnight black\\nDm for questions\\nOffers accepted"}}'
+    '</script>'
+    '<img src="https://images1.vinted.net/t/04_0026a_abcdef/f800/1787798279.webp">'
+    '<img src="https://images1.vinted.net/t/04_0026a_abcdef/f400/1787798279.webp">'
+    '<img src="https://images2.vinted.net/t/03_0011b_ghijkl/f800/1787798280.webp">'
+    '</html>'
 )
 
 
@@ -54,6 +61,7 @@ def test_missing_description_returns_empty_not_crash():
 
 
 def test_counts_photos():
+    """Two distinct photos across three tags: f800 and f400 are one image."""
     assert count_photos(REAL_PAGE) == 2
 
 
@@ -72,7 +80,7 @@ def test_icloud_lock_in_description_only_flips_ok_false():
     html = '{"description":"Great condition but sadly iCloud locked"}'
     result = verify(StubClient(html=html), {"path": "/items/1", "title": "iPhone 13 128GB"}, parse("iPhone 13 128GB"))
     assert result.ok is False
-    assert "icloud_locked" in result.extra_disqualifiers
+    assert "activation_locked" in result.extra_disqualifiers
 
 
 def test_clean_listing_verifies_ok():

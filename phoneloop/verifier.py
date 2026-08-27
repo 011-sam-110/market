@@ -23,7 +23,16 @@ log = logging.getLogger("phoneloop.verifier")
 # escapes included, so an apostrophe or a newline in the seller's text does not
 # truncate it halfway.
 _DESCRIPTION_RE = re.compile(r'"description"\s*:\s*("(?:[^"\\]|\\.)*")')
-_PHOTO_RE = re.compile(r'"(?:full_size_url|url)"\s*:\s*"https://images\d*\.vinted')
+# Photos live in HTML src/srcset attributes, not in JSON keys. The original
+# pattern expected `"full_size_url":` or `"url":` in front of the URL; on a real
+# listing page exactly one of 186 image URLs has a JSON key before it, so every
+# listing counted zero photos and the "one stock image vs eight real photos"
+# signal was silently dead.
+#
+# Counting the distinct path id rather than the URL is what makes this a photo
+# count instead of a srcset count -- the same image appears at f200, f400 and
+# f800 on one tag.
+_PHOTO_RE = re.compile(r"images\d*\.vinted\.net/(?:t|tc)/([^/]+)/")
 
 
 @dataclass(frozen=True)
