@@ -15,6 +15,8 @@ from urllib.parse import urlencode
 
 import requests
 
+from . import proxies
+
 log = logging.getLogger("phoneloop.client")
 
 BASE_URL = "https://www.vinted.co.uk"
@@ -43,6 +45,12 @@ class VintedClient:
         self.session = session or requests.Session()
         self.timeout = timeout
         self._handshaked = False
+        # Only route a session we made ourselves. An injected one belongs to the
+        # caller -- in tests that is a fake with no proxy support at all, and
+        # reaching into it would be the library deciding something that is not
+        # its business.
+        if session is None:
+            proxies.apply(self.session)
 
     def handshake(self) -> None:
         """Fetch the homepage to pick up a fresh anonymous session cookie.

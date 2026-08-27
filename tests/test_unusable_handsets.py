@@ -114,3 +114,27 @@ class TestPhotoCount:
 
     def test_no_photos_is_zero_not_an_error(self):
         assert count_photos("<html><body>nothing here</body></html>") == 0
+
+
+class TestBundleDoesNotEatModelNames:
+    """`\bx\d+\b` was meant to catch "x3" as a quantity. It also matches the
+    X9 in "Oppo Find X9", which silently threw away a £788 listing -- found by
+    looking at the pile the scanner had discarded.
+    """
+
+    @pytest.mark.parametrize("title", [
+        "Oppo Find X9 Pro 16/512GB Titanium Charcoal",
+        "Poco X6 Pro 512GB",
+        "Nothing Phone X2 256GB",
+    ])
+    def test_a_model_name_containing_x_plus_digit_is_not_a_bundle(self, title):
+        assert "bundle" not in parse(title).disqualifiers
+
+    @pytest.mark.parametrize("title", [
+        "4x Sony Xperia Z3 BUNDLE",
+        "3 x iPhone 11 job lot",
+        "iPhone cases x3",
+        "Samsung chargers x10",
+    ])
+    def test_real_quantities_are_still_caught(self, title):
+        assert "bundle" in parse(title).disqualifiers

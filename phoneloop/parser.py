@@ -164,7 +164,17 @@ _DISQUALIFIERS = [
     ("faulty", r"\bfaulty\b|\bnot\s*working\b|\bdoesn'?t\s*work\b|\bbroken\b|\bdead\b"),
     # A bundle is a different product at a different price. One in a bucket
     # drags the median and makes single handsets look overpriced.
-    ("bundle", r"\bbundle\b|\bjob\s*lot\b|\bjoblot\b|\bbulk\b|\b\d+\s*x\s+\w|\bx\d+\b"),
+    #
+    # The quantity forms have to be narrow. A bare `\bx\d+\b` reads the X9 in
+    # "Oppo Find X9" as a quantity and threw away a £788 listing -- and would do
+    # the same to every Poco X6 and Nothing Phone X2. Real quantities are either
+    # leading ("4x Sony", "3 x iPhone") or trailing ("cases x3"); a model name
+    # puts its X-number in the middle, after a brand word.
+    ("bundle", (
+        r"\bbundle\b|\bjob\s*lot\b|\bjoblot\b|\bbulk\b"
+        r"|\b\d+\s*x\s+\w"
+        r"|\bx\s*\d{1,2}\s*$"
+    )),
 ]
 
 _STORAGE_RE = re.compile(r"\b(\d{1,4})\s*(gb|tb)\b")
