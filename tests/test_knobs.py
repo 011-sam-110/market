@@ -42,12 +42,17 @@ class TestDefaults:
         assert k.import_vat_term_bp == 0
 
     def test_str_threshold_is_documented_as_a_chosen_convention_not_a_measurement(self):
-        doc = Knobs.__doc__ or ""
-        # The convention lives on the field's inline comment, not the class
-        # docstring's first line -- assert against the module docstring,
-        # which is where the claim actually has to hold up.
+        # The convention lives on the module docstring, which is where the
+        # claim actually has to hold up -- and it must name str_threshold_bp
+        # specifically, not just use the word "chosen" somewhere else in the
+        # module (e.g. describing import_vat_term_bp), or this test would
+        # keep passing after the str_threshold_bp caveat was deleted.
         import phoneloop.knobs as knobs_module
-        assert "not measured" in knobs_module.__doc__ or "chosen" in knobs_module.__doc__
+        doc = knobs_module.__doc__ or ""
+        assert "str_threshold_bp" in doc
+        idx = doc.index("str_threshold_bp")
+        nearby = doc[idx:idx + 200]
+        assert "not a measurement" in nearby or "CHOSEN" in nearby or "chosen" in nearby
 
     def test_knobs_carries_every_feekbobs_attribute_name(self):
         k = Knobs()
