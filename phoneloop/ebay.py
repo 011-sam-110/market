@@ -55,6 +55,15 @@ _STORAGE_RE = re.compile(r"\b(\d{2,4})\s*(GB|TB)\b", re.I)
 # carries storage -- the field missing from most Vinted titles.
 _ASPECT_SEP = "·"
 
+# Below this many comparable UK listings there is no market rate to report.
+MIN_SAMPLES = 6
+
+# Median absolute deviation as a fraction of the median. Above this the pool is
+# not one product. Set from the live tables: coherent queries sat at 0.03-0.10,
+# and the incoherent iPhone 11 128GB pool that produced a 28800 ceiling was far
+# above it.
+MAX_DISPERSION = 0.22
+
 _CONDITIONS = (
     "Pre-owned", "New (other)", "Brand New", "New with box", "New without box",
     "Open box", "Very Good - Refurbished", "Excellent - Refurbished",
@@ -116,8 +125,16 @@ class EbayListing:
 
     @property
     def is_used(self) -> bool:
+        """Genuinely second-hand, comparable to a handset bought off Vinted.
+
+        "New (other)" is deliberately NOT used. eBay applies it to sealed and
+        shop-soiled retail stock, which prices like new -- pooling it with
+        pre-owned inflates the ceiling, and inflating the ceiling is the
+        direction that loses money. It showed up as an iPhone 11 128GB ceiling
+        of 28800 when the model-wide used figure was 12316.
+        """
         c = self.condition.lower()
-        return "pre-owned" in c or "refurb" in c or "open box" in c or "new (other)" in c
+        return "pre-owned" in c or "refurb" in c or "open box" in c
 
 
 def parse_row(text: str, url: str = "") -> EbayListing | None:
@@ -209,8 +226,11 @@ def retail_ceiling(listings, storage_gb: int | None = None,
     here: one £1,500 outlier in a page of £200 handsets would drag a mean into
     nonsense, and search results are full of them.
 
-    Returns None below four samples. A ceiling built on two listings is not a
-    market rate, it is two people's opinions.
+    Returns None below MIN_SAMPLES, and None again when the surviving prices
+    are too scattered to describe one product. Both guards exist because the
+    thin pools are exactly the wrong ones to trust: a capacity-specific query
+    leaves four or five UK comps, and four listings that disagree wildly are
+    not a market rate, they are four people's opinions.
     """
     overseas = sum(1 for x in listings if not x.is_uk)
     pool = [x for x in listings if x.is_uk]
@@ -229,11 +249,16 @@ def retail_ceiling(listings, storage_gb: int | None = None,
 
     landed = [x.landed_pence for x in pool if x.landed_pence is not None]
     unpriceable = len(pool) - len(landed)
-    if len(landed) < 4:
+    if len(landed) < MIN_SAMPLES:
         return None
 
     median = int(statistics.median(landed))
     mad = int(statistics.median([abs(v - median) for v in landed]))
+    # A coherent product prices tightly. When the spread is this wide the pool
+    # is still holding more than one thing -- a different capacity, a bundle,
+    # a for-parts unit -- and its median describes none of them.
+    if median <= 0 or mad / median > MAX_DISPERSION:
+        return None
     return Ceiling(
         median_pence=median,
         mad_pence=mad,

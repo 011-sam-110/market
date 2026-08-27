@@ -142,7 +142,7 @@ class TestRow:
 
 
 class TestCeiling:
-    def _pool(self, n=6, base=20000, step=500):
+    def _pool(self, n=7, base=20000, step=500):
         return [
             EbayListing(f"iPhone 13 {i}", base + i * step, 0,
                         condition="Pre-owned", storage_gb=128)
@@ -151,8 +151,8 @@ class TestCeiling:
 
     def test_median_of_landed_uk_prices(self):
         c = retail_ceiling(self._pool(), storage_gb=128)
-        assert c.samples == 6
-        assert c.median_pence == 21250
+        assert c.samples == 7
+        assert c.median_pence == 21500
 
     def test_overseas_listings_are_excluded_and_counted(self):
         """They skew cheap, which makes them look like the bargains, and they
@@ -163,7 +163,7 @@ class TestCeiling:
         ]
         c = retail_ceiling(pool, storage_gb=128)
         assert c.overseas_excluded == 1
-        assert c.median_pence == 21250, "the import must not drag the median"
+        assert c.median_pence == 21500, "the import must not drag the median"
 
     def test_listings_with_unknown_postage_are_excluded_and_counted(self):
         pool = self._pool() + [
@@ -172,17 +172,17 @@ class TestCeiling:
         ]
         c = retail_ceiling(pool, storage_gb=128)
         assert c.unpriceable_excluded == 1
-        assert c.samples == 6
+        assert c.samples == 7
 
     def test_a_different_capacity_is_not_comparable(self):
         pool = self._pool() + [
             EbayListing("512GB", 40000, 0, condition="Pre-owned", storage_gb=512)
         ]
-        assert retail_ceiling(pool, storage_gb=128).samples == 6
+        assert retail_ceiling(pool, storage_gb=128).samples == 7
 
     def test_too_few_samples_is_none_not_a_number(self):
         """Two listings are two people's opinions, not a market rate."""
-        assert retail_ceiling(self._pool(n=3), storage_gb=128) is None
+        assert retail_ceiling(self._pool(n=5), storage_gb=128) is None
         assert retail_ceiling([], storage_gb=128) is None
 
     def test_an_outlier_does_not_move_the_median(self):
@@ -190,7 +190,7 @@ class TestCeiling:
             EbayListing("mispriced", 150000, 0, condition="Pre-owned",
                         storage_gb=128)
         ]
-        assert retail_ceiling(pool, storage_gb=128).median_pence == 21500
+        assert retail_ceiling(pool, storage_gb=128).median_pence == 21750
 
 
 class TestVariantContamination:
@@ -217,7 +217,7 @@ class TestVariantContamination:
                         condition="Pre-owned",
                         aspects=("Pre-owned", "Apple iPhone 13", "128 GB"),
                         storage_gb=128)
-            for i in range(5)
+            for i in range(7)
         ] + [
             EbayListing("iPhone 13 mini", 9000, 0, condition="Pre-owned",
                         aspects=("Pre-owned", "Apple iPhone 13 mini", "128 GB"),
@@ -225,8 +225,8 @@ class TestVariantContamination:
         ]
         c = retail_ceiling(pool, storage_gb=128, model="iphone-13")
         assert c.variant_excluded == 1
-        assert c.samples == 5
-        assert c.median_pence == 22000, "the mini must not drag the median"
+        assert c.samples == 7
+        assert c.median_pence == 22500, "the mini must not drag the median"
 
     def test_uncatalogued_rows_are_dropped_when_a_model_is_demanded(self):
         """Roughly two thirds of a live page has no catalogue line. Assuming
@@ -234,20 +234,20 @@ class TestVariantContamination:
         pool = [
             EbayListing(f"iPhone 13 {i}", 21000, 0, condition="Pre-owned",
                         aspects=("Pre-owned", "Apple iPhone 13"), storage_gb=128)
-            for i in range(4)
+            for i in range(6)
         ] + [
             EbayListing("no aspects", 5000, 0, condition="Pre-owned",
                         storage_gb=128)
         ]
         c = retail_ceiling(pool, storage_gb=128, model="iphone-13")
         assert c.variant_excluded == 1
-        assert c.samples == 4
+        assert c.samples == 6
 
     def test_without_a_model_nothing_is_excluded(self):
         """Back-compatible: the filter only applies when asked for."""
         pool = [
             EbayListing(f"x{i}", 20000, 0, condition="Pre-owned", storage_gb=128)
-            for i in range(4)
+            for i in range(6)
         ]
         assert retail_ceiling(pool, storage_gb=128).variant_excluded == 0
 
@@ -268,3 +268,46 @@ class TestSaturation:
 
     def test_empty_does_not_divide_by_zero(self):
         assert saturation([])["watchers_per_listing"] == 0.0
+
+
+class TestPoolPurity:
+    """Two guards against a ceiling that describes no real handset.
+
+    Both were added after live data produced an iPhone 11 128GB ceiling of
+    28800 while the model-wide used figure for the same phone was 12316. The
+    pool was five listings, some of them sealed retail stock.
+    """
+
+    def test_new_other_is_not_a_used_comparable(self):
+        """eBay applies "New (other)" to sealed and shop-soiled retail stock.
+        It prices like new, and pooling it inflates the ceiling -- which is the
+        direction that loses money."""
+        assert parse_row(OVERSEAS).is_used is False
+        assert parse_row(UK_USED).is_used is True
+
+    def test_a_scattered_pool_has_no_median_worth_reporting(self):
+        """These seven prices range over 5x. Something in the pool is not the
+        handset being priced, and reporting their midpoint would launder that
+        into a number that looks authoritative."""
+        pool = [
+            EbayListing(f"x{i}", p, 0, condition="Pre-owned", storage_gb=128)
+            for i, p in enumerate([9000, 11000, 15000, 20000, 28000, 41000, 46000])
+        ]
+        assert retail_ceiling(pool, storage_gb=128) is None
+
+    def test_a_tight_pool_still_reports(self):
+        pool = [
+            EbayListing(f"x{i}", p, 0, condition="Pre-owned", storage_gb=128)
+            for i, p in enumerate([20500, 21000, 21200, 21500, 21800, 22000, 22400])
+        ]
+        c = retail_ceiling(pool, storage_gb=128)
+        assert c is not None
+        assert c.median_pence == 21500
+
+    def test_six_is_the_floor(self):
+        def pool(n):
+            return [EbayListing(f"x{i}", 21000 + i * 100, 0,
+                                condition="Pre-owned", storage_gb=128)
+                    for i in range(n)]
+        assert retail_ceiling(pool(5), storage_gb=128) is None
+        assert retail_ceiling(pool(6), storage_gb=128) is not None
