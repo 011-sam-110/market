@@ -160,7 +160,19 @@ _DISQUALIFIERS = [
         r"|\bbarred\b"
         r"|reported\s*(lost|stolen)"
     )),
-    ("damaged", r"\bcracked\b|\bsmashed\b|\bshattered\b|screen\s*burn|\bdamaged\b|\bchipped\b"),
+    # Nouns as well as adjectives. The rule caught "cracked" and missed "has a
+    # crack on the back as shown" -- a listing that then ranked FIRST on the
+    # board as the only guaranteed-safe buy the project had ever found. Sellers
+    # describe damage both ways and the noun form is not the rarer one.
+    #
+    # Negation is handled separately in _negated(), because "no cracks" and
+    # "no scratches" are among the commonest phrases in a CLEAN listing and a
+    # fixed-width lookbehind cannot see past "without any" or "free from".
+    ("damaged", (
+        r"\bcrack(s|ed|ing)?\b|\bsmash(ed)?\b|\bshatter(ed)?\b"
+        r"|screen\s*burn|\bdamaged?\b|\bchip(s|ped)?\b"
+        r"|\bdent(s|ed)?\b|\bspider\s*web"
+    )),
     ("faulty", r"\bfaulty\b|\bnot\s*working\b|\bdoesn'?t\s*work\b|\bbroken\b|\bdead\b"),
     # A bundle is a different product at a different price. One in a bucket
     # drags the median and makes single handsets look overpriced.
@@ -222,14 +234,61 @@ def _normalise(text: str) -> str:
     t = re.sub(r"(\d)(pro|plus|mini|max|ultra|fe)\b", r"\1 \2", t)
     # "S21+" is standard shorthand for the Plus model.
     t = re.sub(r"(\d)\s*\+", r"\1 plus", t)
-    # Punctuation used as a separator becomes whitespace, so "iPhone 13.Excellent"
-    # and "iPhone 13 , 128GB ," both tokenise cleanly.
-    t = re.sub(r"[,./\\|–—]+", " ", t)
-    return re.sub(r"\s+", " ", t).strip()
+    # Separators that carry no clause meaning just become whitespace.
+    t = re.sub(r"[/\\|–—]+", " ", t)
+    # Sentence punctuation becomes a spaced semicolon rather than vanishing.
+    # It still tokenises cleanly -- "iPhone 13.Excellent" and "iPhone 13 , 128GB"
+    # both split on whitespace as before, and every rule here is \b-anchored so
+    # a free-standing ";" reads as a gap. But it SURVIVES, which is what lets
+    # _negated() tell "no charger, cracked back" from "no cracks".
+    # Erasing it is why the rules once passed a phone whose description read
+    # "Nothing wrong with the phone itself but has a crack on the back".
+    t = re.sub(r"[,.;!?]+", " ; ", t)
+    return re.sub(r"\s+", " ", t).strip(" ;")
+
+
+# Words that turn a damage mention into a reassurance. "No cracks or
+# scratches" is one of the commonest sentences in a genuinely clean listing, so
+# matching the damage word alone would bin most of the good stock.
+_NEGATORS = re.compile(
+    r"\b(no|not|none|never|without|zero|nothing"
+    r"|free\s+from|free\s+of"
+    r"|doesn'?t\s+have|does\s+not\s+have|hasn'?t\s+got)\b"
+)
+
+# How far back to look for one. Long enough to cover "without any visible",
+# short enough that a negation about something else earlier in the sentence
+# does not reach across and excuse real damage.
+_NEGATION_WINDOW = 28
+
+
+def _negated(text: str, start: int) -> bool:
+    """Is this match inside the scope of a negation immediately before it?
+
+    A fixed-width lookbehind cannot express this -- "no cracks", "without any
+    cracks" and "free from cracks" are three different widths -- so the window
+    before the match is inspected directly.
+    """
+    window = text[max(0, start - _NEGATION_WINDOW):start]
+    # A clause boundary ends a negation's reach. In "no charger, cracked back"
+    # the "no" governs the charger and says nothing about the crack.
+    #
+    # "and" is NOT a boundary: it continues a list under the same negation, as
+    # in "free from cracks and chips". "but" is, because it reverses -- which
+    # is exactly the shape of a misleading listing: reassure, then admit.
+    window = re.split(r";|\bbut\b|\bhowever\b|\bthough\b", window)[-1]
+    return bool(_NEGATORS.search(window))
 
 
 def _find_disqualifiers(text: str) -> tuple[str, ...]:
-    found = [name for name, pat in _DISQUALIFIERS if re.search(pat, text)]
+    found = []
+    for name, pat in _DISQUALIFIERS:
+        # Every occurrence, not just the first: "no scratches but cracked back"
+        # must still disqualify, and the first match there is the negated one.
+        for match in re.finditer(pat, text):
+            if not _negated(text, match.start()):
+                found.append(name)
+                break
     return tuple(dict.fromkeys(found))  # de-duped, order preserved
 
 
