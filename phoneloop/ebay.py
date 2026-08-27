@@ -46,7 +46,13 @@ _DELIVERY_RE = re.compile(r"\+\s*£\s*([\d,]+\.\d{2})\s*(?:delivery|postage)", r
 _FREE_RE = re.compile(r"\bfree\b.{0,24}\b(?:delivery|postage)", re.I)
 _UNSPECIFIED_RE = re.compile(r"(?:postage|delivery)\s+not\s+specified", re.I)
 _WATCHERS_RE = re.compile(r"(\d[\d,]*)\s+watch(?:ers|ing)", re.I)
-_FROM_RE = re.compile(r"^from\s+(.+?)\s*$", re.I | re.M)
+# "from Germany" is a shipping origin. "from £107.98 with coupon" is the price
+# range on a multi-variant listing, and the first version of this pattern read
+# that as a country -- so a UK listing with variant pricing was booked as
+# overseas and dropped from the UK pool. That is the expensive direction: it
+# discards good comps and shrinks exactly the sample the ceiling depends on.
+# Require the origin to start with a letter.
+_FROM_RE = re.compile(r"^from\s+(?![£$€\d])([A-Za-z][^\n]*?)\s*$", re.I | re.M)
 _STORAGE_RE = re.compile(r"\b(\d{2,4})\s*(GB|TB)\b", re.I)
 
 # The aspects line is eBay's own catalogue match, e.g.
@@ -267,6 +273,34 @@ def retail_ceiling(listings, storage_gb: int | None = None,
         unpriceable_excluded=unpriceable,
         variant_excluded=variant,
     )
+
+
+# A UK search served from a UK address returns mostly UK sellers. Below this
+# share the request was almost certainly geolocated somewhere else, and the
+# result set has been reordered by shipping proximity to that somewhere.
+MIN_UK_SHARE = 0.55
+
+
+def uk_share(listings) -> float:
+    """Fraction of results that ship from the UK."""
+    if not listings:
+        return 0.0
+    return sum(1 for x in listings if x.is_uk) / len(listings)
+
+
+def looks_geolocated_abroad(listings) -> bool:
+    """Was this result set served to a non-UK address?
+
+    Worth checking explicitly, because it is invisible downstream. Captured
+    through a rotating residential gateway that takes a fresh exit per
+    navigation, the UK share swung between queries in a SINGLE run -- 79 of 88
+    for one handset and 28 of 84 for the next. eBay reorders by shipping
+    proximity, so a query answered from Hong Kong yields a thin, unrepresentative
+    UK pool. The ceiling built from it is not wrong-looking, just wrong.
+
+    An empty result set is not evidence of this, so it does not trip.
+    """
+    return bool(listings) and uk_share(listings) < MIN_UK_SHARE
 
 
 def saturation(listings) -> dict:

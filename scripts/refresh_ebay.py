@@ -34,8 +34,15 @@ from urllib.parse import quote_plus, urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from phoneloop import config, proxies  # noqa: E402
-from phoneloop.ebay import parse_rows, retail_ceiling, saturation  # noqa: E402
+from phoneloop import config, harness, proxies  # noqa: E402
+from phoneloop.harness import Cassette, recorded  # noqa: E402
+from phoneloop.ebay import (  # noqa: E402
+    looks_geolocated_abroad,
+    parse_rows,
+    retail_ceiling,
+    saturation,
+    uk_share,
+)
 from phoneloop.parser import parse  # noqa: E402
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -95,7 +102,14 @@ def query_text(model: str, storage_gb: int | None) -> str:
     return f"{words} {storage_gb}gb" if storage_gb else words
 
 
-def fetch(page, text: str) -> list:
+def scrape_rows(page, text: str) -> list[dict]:
+    """The raw result rows, straight off a live page.
+
+    Returns the untouched rows rather than parsed listings, because those are
+    what gets recorded: the whole point of the fixture is to iterate on
+    parse_row() offline, and a fixture of already-parsed objects could not
+    exercise the parser at all.
+    """
     page.goto(SEARCH_URL.format(quote_plus(text)),
               timeout=NAV_TIMEOUT_MS, wait_until="load")
     page.wait_for_timeout(6000)
@@ -106,7 +120,17 @@ def fetch(page, text: str) -> list:
         raise RuntimeError("captcha - eBay is challenging this session")
     if "Something went wrong" in body or page.title().startswith("Error Page"):
         raise RuntimeError("eBay error page - likely rate limited, back off")
-    return parse_rows(page.evaluate(_ROW_JS))
+    return page.evaluate(_ROW_JS)
+
+
+def fetch(cassette, page, text: str) -> list:
+    """Rows for one query, replayed from the cassette or scraped live.
+
+    In replay mode `page` is None and no browser is ever launched, which is
+    what makes the ceiling logic developable without a marketplace.
+    """
+    raw = recorded(cassette, "ebay", text, lambda: scrape_rows(page, text))
+    return parse_rows(raw)
 
 
 def main() -> int:
@@ -114,6 +138,7 @@ def main() -> int:
     ap.add_argument("--query", action="append")
     ap.add_argument("--limit", type=int, default=8)
     ap.add_argument("--out", type=Path, default=None)
+    ap.add_argument("--root", type=Path, default=harness.DEFAULT_ROOT)
     ap.add_argument("--headless", action="store_true",
                     help="expect a 403; eBay wants a real browser")
     args = ap.parse_args()
@@ -135,19 +160,31 @@ def main() -> int:
     print(f"eBay ceilings for {len(texts)} queries -> {out}")
     print(f"egress: {'proxy ' + proxies.redact(proxies.proxy_url()) if proxy else 'DIRECT (expect rate limiting)'}")
 
-    from playwright.sync_api import sync_playwright
+    import contextlib
+
+    cassette = Cassette(args.root)
+    offline = harness.mode() == harness.REPLAY
+    print(f"harness: {harness.mode()}"
+          + (f", {len(cassette.keys('ebay'))} ebay recordings" if offline else ""))
 
     table: dict[str, dict] = {}
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=args.headless, channel="chrome",
-                                     proxy=proxy)
-        page = browser.new_page(locale="en-GB")
+    with contextlib.ExitStack() as stack:
+        page = None
+        if not offline:
+            from playwright.sync_api import sync_playwright
+            pw = stack.enter_context(sync_playwright())
+            browser = pw.chromium.launch(headless=args.headless,
+                                         channel="chrome", proxy=proxy)
+            stack.callback(browser.close)
+            page = browser.new_page(locale="en-GB")
+
         for (model, storage), text in zip(pairs, texts):
             try:
-                listings = fetch(page, text)
+                listings = fetch(cassette, page, text)
             except Exception as exc:                     # noqa: BLE001
                 print(f"  {text:<30} FAILED {str(exc)[:56]}")
-                time.sleep(PAUSE_S * 3)
+                if not offline:
+                    time.sleep(PAUSE_S * 3)
                 continue
 
             # Narrow to the exact model using eBay's own catalogue line. A
@@ -161,6 +198,14 @@ def main() -> int:
             if want is None:
                 print(f"  {text:<30} SKIPPED - no model slug from that query")
                 continue
+            # A pool served to a non-UK address is not a UK market sample.
+            # Skipping it leaves the previous good price in the merged table,
+            # which is the right outcome: no number beats a wrong one.
+            if looks_geolocated_abroad(listings):
+                print(f"  {text:<30} SKIPPED - only {uk_share(listings):.0%} UK, "
+                      "served abroad")
+                continue
+
             ceiling = retail_ceiling(listings, storage_gb=storage, model=want)
             sat = saturation(listings)
             table[text] = {
@@ -178,8 +223,8 @@ def main() -> int:
                      if ceiling else "too few UK comps after filtering")
             print(f"  {text:<30} {sat['live_listings']:>3} live "
                   f"({sat['overseas_listings']:>2} overseas)  {shown}")
-            time.sleep(PAUSE_S)
-        browser.close()
+            if not offline:
+                time.sleep(PAUSE_S)
 
     out.parent.mkdir(parents=True, exist_ok=True)
     # Merge, never overwrite. These tables are built up across many runs -- CeX

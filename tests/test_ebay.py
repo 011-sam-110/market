@@ -12,6 +12,8 @@ import pytest
 
 from phoneloop.ebay import (
     EbayListing,
+    looks_geolocated_abroad,
+    uk_share,
     parse_row,
     parse_rows,
     retail_ceiling,
@@ -311,3 +313,82 @@ class TestPoolPurity:
                     for i in range(n)]
         assert retail_ceiling(pool(5), storage_gb=128) is None
         assert retail_ceiling(pool(6), storage_gb=128) is not None
+
+
+class TestEgressGeography:
+    """A UK ceiling is only meaningful if the search was answered as a UK user.
+
+    Captured through a rotating residential gateway, which takes a fresh exit
+    per navigation, the UK share swung between queries inside one run: 79 of 88
+    for one handset, 28 of 84 for the next. eBay reorders results by shipping
+    proximity, so a query answered from Hong Kong returns a thin and
+    unrepresentative UK pool. Nothing downstream can see that -- the ceiling
+    comes out looking perfectly ordinary.
+    """
+
+    def _pool(self, uk, abroad):
+        return (
+            [EbayListing(f"uk{i}", 20000, 0, condition="Pre-owned")
+             for i in range(uk)]
+            + [EbayListing(f"ab{i}", 9000, 0, condition="Pre-owned",
+                           ships_from="Hong Kong") for i in range(abroad)]
+        )
+
+    def test_a_uk_served_page_passes(self):
+        assert uk_share(self._pool(79, 9)) > 0.55
+        assert looks_geolocated_abroad(self._pool(79, 9)) is False
+
+    def test_the_real_bad_capture_is_caught(self):
+        """iPhone 13 Pro: 28 UK of 84 rows, captured via a non-UK exit."""
+        assert looks_geolocated_abroad(self._pool(28, 56)) is True
+
+    def test_an_empty_result_set_is_not_evidence_of_geolocation(self):
+        """Nothing matched is a different problem, and conflating them would
+        send someone to debug the proxy over an unstocked query."""
+        assert looks_geolocated_abroad([]) is False
+        assert uk_share([]) == 0.0
+
+    def test_the_boundary_is_inclusive_of_the_threshold(self):
+        assert looks_geolocated_abroad(self._pool(55, 45)) is False
+        assert looks_geolocated_abroad(self._pool(54, 46)) is True
+
+
+class TestShipsFromIsNotAPriceLine:
+    """A multi-variant listing opens with "from £107.98", not a country.
+
+    The first version of _FROM_RE matched any line starting with "from", so a
+    UK listing with variant pricing was recorded as shipping from
+    "£107.98 with coupon" and dropped out of the UK pool. That is the
+    expensive direction: it discards good comps and shrinks exactly the sample
+    the ceiling is computed from. Verbatim from a live eBay UK page,
+    2026-08-27.
+    """
+
+    PRICE_LINE = (
+        "Apple iPhone 13 128GB Unlocked Smartphone Various Colours\n"
+        "Pre-owned \u00b7 Apple iPhone 13 \u00b7 Unlocked \u00b7 128 GB\n"
+        "from \u00a3107.98 with coupon\n"
+        "Free postage\n"
+    )
+
+    OVERSEAS = (
+        "Apple iPhone 13 128GB Unlocked Smartphone\n"
+        "Pre-owned \u00b7 Apple iPhone 13 \u00b7 Unlocked \u00b7 128 GB\n"
+        "\u00a3189.99\n"
+        "from Germany\n"
+        "+ \u00a312.99 postage\n"
+    )
+
+    def test_a_from_price_line_is_not_a_shipping_country(self):
+        listing = parse_row(self.PRICE_LINE)
+        assert listing is not None
+        assert listing.ships_from == ""
+        assert listing.is_uk is True
+
+    def test_a_real_origin_is_still_read(self):
+        """The fix must not blind the parser to genuine overseas sellers --
+        they skew cheap, look like the bargains, and carry customs and VAT."""
+        listing = parse_row(self.OVERSEAS)
+        assert listing is not None
+        assert listing.ships_from == "Germany"
+        assert listing.is_uk is False

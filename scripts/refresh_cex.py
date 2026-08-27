@@ -42,7 +42,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from phoneloop import config  # noqa: E402
+from phoneloop import harness  # noqa: E402
 from phoneloop.cex import best_cash, parse_sell_page  # noqa: E402
+from phoneloop.harness import Cassette, recorded  # noqa: E402
 from phoneloop.parser import parse as parse_model  # noqa: E402
 from phoneloop.parser import parse  # noqa: E402
 
@@ -92,7 +94,13 @@ def query_text(model: str, storage_gb: int | None) -> str:
     return f"{words} {storage_gb}gb" if storage_gb else words
 
 
-def fetch(page, text: str) -> list:
+def scrape_text(page, text: str) -> str:
+    """The sell page's visible text, straight off a live page.
+
+    Returns the raw text rather than parsed boxes, because that is what gets
+    recorded: the fixture exists so parse_sell_page() can be iterated offline,
+    and a fixture of already-parsed boxes could not exercise it at all.
+    """
     page.goto(SELL_URL.format(text.replace(" ", "%20")),
               timeout=NAV_TIMEOUT_MS, wait_until="domcontentloaded")
     # Prices arrive from a client-side search call, so waiting on the network
@@ -106,8 +114,77 @@ def fetch(page, text: str) -> list:
         body = page.inner_text("body")
         if "security verification" in body.lower() or "Ray ID" in body:
             raise RuntimeError("blocked by Cloudflare - needs a headed browser")
-        return []
-    return parse_sell_page(page.inner_text("body"))
+        return ""
+    return page.inner_text("body")
+
+
+def fetch(cassette, page, text: str) -> list:
+    """Boxes for one query, replayed from the cassette or scraped live.
+
+    In replay mode `page` is None and no browser is launched -- which matters
+    more here than anywhere else, because CeX is behind Cloudflare and only a
+    real headed Chrome gets through it at all.
+    """
+    body = recorded(cassette, "cex", text, lambda: scrape_text(page, text))
+    return parse_sell_page(body) if body else []
+
+
+def _record_query(table: dict, args, pair, text: str, boxes) -> None:
+    """Score one query's boxes into the table. Shared by both paths.
+
+    Offline replay and live scraping must produce byte-identical entries or the
+    harness stops being a harness -- a review that differs from a live run
+    because the two paths drifted would be worse than no harness at all.
+    """
+    # An explicit --query still has to resolve to a model slug, or the board
+    # can never match the entry to a listing and the price sits in the table
+    # doing nothing. Derive it the same way the feed does.
+    want = pair[0] if not args.query else parse_model(text).model
+    storage = pair[1] if not args.query else parse_model(text).storage_gb
+    if want is None:
+        print(f"  {text:<34} SKIPPED - no model slug from that query")
+        return
+
+    # Narrow to the exact handset. Without this the minimum is taken across
+    # every variant the search returned, which mixes four different phones for
+    # a query like "iphone 17".
+    cash = {g: best_cash(boxes, g, model=want) for g in GRADES}
+    table[text] = {
+        "model": want,
+        "storage_gb": storage,
+        "cash_pence": cash,
+        "boxes_seen": len(boxes),
+        "unlocked_seen": sum(1 for b in boxes if b.unlocked),
+        "refreshed": datetime.now(UTC).isoformat(),
+    }
+    shown = "  ".join(f"{g}=£{v/100:.0f}" if v else f"{g}=-"
+                      for g, v in cash.items())
+    kept = sum(1 for b in boxes if b.model_slug == want)
+    print(f"  {text:<34} {kept:>2}/{len(boxes):>2} boxes  {shown}")
+
+
+def _write(table: dict, out: Path) -> int:
+    """Merge, never overwrite.
+
+    These tables are built up across many runs -- CeX and eBay both rate-limit,
+    so a full rebuild in one pass is not possible -- and a query that failed
+    this time must not delete the good price it returned last time.
+    """
+    out.parent.mkdir(parents=True, exist_ok=True)
+    merged = {}
+    if out.exists():
+        try:
+            merged = json.loads(out.read_text(encoding="utf-8"))
+        except ValueError:
+            print(f"  ! {out} was unreadable, starting fresh")
+    before = len(merged)
+    merged.update(table)
+    out.write_text(json.dumps(merged, indent=2), encoding="utf-8")
+    priced = sum(1 for v in merged.values()
+                 if any((v.get("cash_pence") or {}).values()))
+    print(f"table now holds {len(merged)} entries "
+          f"({len(merged) - before} new this run, {priced} priced)")
+    return 0
 
 
 def main() -> int:
@@ -115,6 +192,7 @@ def main() -> int:
     ap.add_argument("--query", action="append", help="explicit query, repeatable")
     ap.add_argument("--limit", type=int, default=25)
     ap.add_argument("--out", type=Path, default=None)
+    ap.add_argument("--root", type=Path, default=harness.DEFAULT_ROOT)
     ap.add_argument("--headless", action="store_true",
                     help="re-test the Cloudflare block; returns 0 boxes as of 2026-08-27")
     args = ap.parse_args()
@@ -134,9 +212,24 @@ def main() -> int:
 
     print(f"refreshing CeX prices for {len(texts)} queries -> {out}")
 
+    table: dict[str, dict] = {}
+    cassette = Cassette(args.root)
+    offline = harness.mode() == harness.REPLAY
+    print(f"harness: {harness.mode()}"
+          + (f", {len(cassette.keys('cex'))} cex recordings" if offline else ""))
+
+    if offline:
+        for (pair, text) in zip(pairs, texts):
+            try:
+                boxes = fetch(cassette, None, text)
+            except Exception as exc:                  # noqa: BLE001
+                print(f"  {text:<34} {str(exc).splitlines()[0][:52]}")
+                continue
+            _record_query(table, args, pair, text, boxes)
+        return _write(table, out)
+
     from playwright.sync_api import sync_playwright
 
-    table: dict[str, dict] = {}
     with sync_playwright() as pw:
         if args.headless:
             print("warning: headless is blocked by Cloudflare - expect 0 boxes")
@@ -146,61 +239,16 @@ def main() -> int:
         page = browser.new_page(locale="en-GB")
         for (pair, text) in zip(pairs, texts):
             try:
-                boxes = fetch(page, text)
+                boxes = fetch(cassette, page, text)
             except Exception as exc:              # noqa: BLE001
                 print(f"  {text:<34} FAILED {type(exc).__name__}: {str(exc)[:50]}")
                 continue
 
-            # An explicit --query still has to resolve to a model slug, or the
-            # board can never match the entry to a listing and the price sits
-            # in the table doing nothing. Derive it the same way the feed does.
-            want = pair[0] if not args.query else parse_model(text).model
-            storage = pair[1] if not args.query else parse_model(text).storage_gb
-            if want is None:
-                print(f"  {text:<34} SKIPPED - no model slug from that query")
-                continue
-
-            # Narrow to the exact handset. Without this the minimum is taken
-            # across every variant the search returned, which mixes four
-            # different phones for a query like "iphone 17".
-            cash = {g: best_cash(boxes, g, model=want) for g in GRADES}
-            unlocked = [b for b in boxes if b.unlocked]
-            table[text] = {
-                "model": want,
-                "storage_gb": storage,
-                "cash_pence": cash,
-                "boxes_seen": len(boxes),
-                "unlocked_seen": len(unlocked),
-                "refreshed": datetime.now(UTC).isoformat(),
-            }
-            shown = "  ".join(
-                f"{g}=£{v/100:.0f}" if v else f"{g}=-" for g, v in cash.items()
-            )
-            kept = sum(1 for b in boxes if b.model_slug == want)
-            print(f"  {text:<34} {kept:>2}/{len(boxes):>2} boxes  {shown}")
+            _record_query(table, args, pair, text, boxes)
             time.sleep(PAUSE_S)
         browser.close()
 
-    out.parent.mkdir(parents=True, exist_ok=True)
-    # Merge, never overwrite. These tables are built up across many runs -- CeX
-    # and eBay both rate-limit, so a full rebuild in one pass is not possible --
-    # and a query that failed this time must not delete the good price it
-    # returned last time.
-    merged = {}
-    if out.exists():
-        try:
-            merged = json.loads(out.read_text(encoding="utf-8"))
-        except ValueError:
-            print(f"  ! {out} was unreadable, starting fresh")
-    kept = len(merged)
-    merged.update(table)
-    out.write_text(json.dumps(merged, indent=2), encoding="utf-8")
-    print(f"table now holds {len(merged)} entries "
-          f"({len(merged) - kept} new this run)")
-    priced = sum(1 for v in table.values() if any(v["cash_pence"].values()))
-    print(f"\n{priced}/{len(table)} queries returned a usable cash price")
-    print(f"written to {out}")
-    return 0
+    return _write(table, out)
 
 
 if __name__ == "__main__":

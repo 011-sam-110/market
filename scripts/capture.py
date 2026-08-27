@@ -45,7 +45,11 @@ if hasattr(sys.stdout, "reconfigure"):
 
 # Vinted 429s at roughly five listing pages in twenty seconds. Measured.
 LISTING_SPACING_S = 22
-BROWSER_SPACING_S = 7
+# eBay rate-limits a direct connection within roughly ten requests, and direct
+# is the only egress that yields a UK-served result set -- the residential
+# gateway has no country targeting (three consecutive connections gave Poland,
+# the US and the US). So the pacing is generous on purpose.
+BROWSER_SPACING_S = 13
 
 # Enough traps in the set that the verifier has something to catch. These are
 # real ids seen in the feed on 2026-08-27.
@@ -196,16 +200,29 @@ def playwright_proxy():
             "username": parts.username, "password": parts.password}
 
 
-def capture_browser(cassette: Cassette, kind: str, queries: list[str]) -> int:
-    """CeX sell pages or eBay result rows, through a headed Chrome session."""
+def capture_browser(cassette: Cassette, kind: str, queries: list[str],
+                    use_proxy: bool = False) -> int:
+    """CeX sell pages or eBay result rows, through a headed Chrome session.
+
+    Direct by default, which is the opposite of the rest of this project.
+
+    For eBay the egress COUNTRY is load-bearing: results are reordered by
+    shipping proximity, so a query answered from a Hong Kong exit returns a
+    thin UK pool and a ceiling that is wrong without looking wrong. The
+    rotating gateway takes a fresh exit per navigation, so a single capture run
+    produced 79 of 88 UK rows for one handset and 28 of 84 for the next. A
+    plain UK connection is the correct egress here.
+
+    CeX does not care about the address at all -- its gate is the browser
+    fingerprint, and headed Chrome alone clears it.
+    """
     from playwright.sync_api import sync_playwright
 
     saved = 0
     with sync_playwright() as pw:
-        # CeX refuses anything but a real installed Chrome; eBay wants the
-        # residential exit. Giving both to both costs nothing.
-        browser = pw.chromium.launch(headless=False, channel="chrome",
-                                     proxy=playwright_proxy())
+        browser = pw.chromium.launch(
+            headless=False, channel="chrome",
+            proxy=playwright_proxy() if use_proxy else None)
         page = browser.new_page(locale="en-GB")
         for n, query in enumerate(queries):
             if n:
@@ -218,7 +235,17 @@ def capture_browser(cassette: Cassette, kind: str, queries: list[str]) -> int:
                 print(f"  ! {query:<28} {str(exc)[:52]}")
                 continue
             size = len(data) if isinstance(data, list) else len(str(data))
-            print(f"  {kind}: {query:<28} {size:>6} captured")
+            note = ""
+            if kind == "ebay":
+                from phoneloop.ebay import looks_geolocated_abroad, parse_rows, uk_share
+                rows = parse_rows(data)
+                if looks_geolocated_abroad(rows):
+                    # Keep the recording -- it is real, and deleting evidence is
+                    # never the answer -- but say plainly that a ceiling built
+                    # from it does not describe the UK market.
+                    note = (f"  <- ONLY {uk_share(rows):.0%} UK, served abroad; "
+                            "recapture on a UK connection")
+            print(f"  {kind}: {query:<28} {size:>6} captured{note}")
             saved += 1
         browser.close()
     return saved
@@ -258,6 +285,9 @@ def main() -> int:
     ap.add_argument("--listings", type=int, default=10,
                     help="how many Vinted listing pages to record")
     ap.add_argument("--root", type=Path, default=harness.DEFAULT_ROOT)
+    ap.add_argument("--proxy", action="store_true",
+                    help="route the browser through the residential gateway; "
+                         "do NOT use for eBay, it randomises the exit country")
     args = ap.parse_args()
 
     everything = not (args.vinted or args.cex or args.ebay)
@@ -274,11 +304,11 @@ def main() -> int:
     if everything or args.cex:
         queries = queries_from_tables(cfg, "cex_prices.json")
         print(f"\ncex: {len(queries)} queries (headed Chrome, be patient)")
-        total += capture_browser(cassette, "cex", queries)
+        total += capture_browser(cassette, "cex", queries, args.proxy)
     if everything or args.ebay:
         queries = queries_from_tables(cfg, "ebay_ceilings.json")
         print(f"\nebay: {len(queries)} queries")
-        total += capture_browser(cassette, "ebay", queries)
+        total += capture_browser(cassette, "ebay", queries, args.proxy)
 
     print(f"\n{total} captured; cassette now holds {len(cassette)}")
     print("everything else can now run with no network:")
