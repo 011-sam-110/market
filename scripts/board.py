@@ -61,11 +61,22 @@ def ebay_ceiling(table: dict, model: str,
                  storage_gb: int | None) -> tuple[int | None, bool]:
     """Returns (ceiling, exact). `exact` is False for a capacity-mixed figure.
 
-    The direction of the error matters and runs opposite to CeX. A model-wide
-    CeX price is the cheapest capacity CeX stocks, so it UNDERstates the exit --
-    safe. A model-wide eBay median pools 128GB with 512GB, so for a base-
-    capacity handset it OVERstates the exit, which is the direction that loses
-    money. It is still worth showing, but never silently: the board marks it.
+    A model-wide eBay median is not a bound in either direction, which is why
+    it is marked rather than adjusted. Measured against capacity-specific
+    queries on the same day:
+
+        iPhone 12          model-wide 11100   128GB 18900    +70%
+        iPhone 14          model-wide 21200   128GB 27000    +27%
+        iPhone 14 Pro Max  model-wide 41300   128GB 42600     +3%
+        iPhone 13 Pro      model-wide 29100   128GB 28800     -1%
+
+    The sign is not stable and the size reaches 70%, so a mixed figure cannot
+    be leaned on as either a floor or a ceiling. It is worth showing because
+    it is the only number available for that handset, and worth marking because
+    a margin computed from it is not a margin, it is a placeholder.
+
+    The CeX side behaves differently: a model-wide CeX price is the cheapest
+    capacity CeX stocks, so it genuinely does understate the exit.
     """
     for entry in table.values():
         if entry.get("model") == model and entry.get("storage_gb") == storage_gb:
@@ -157,6 +168,13 @@ def main() -> int:
             checked += 1
             try:
                 resp = client.session.get(url, timeout=30)
+                if resp.status_code in (401, 403) and client.rotate():
+                    # Listing pages rate-limit per exit IP, and the whole point
+                    # of the rotating gateway is that another one is available.
+                    # Without this every verification in a run fails together
+                    # and the board presents its entire top as unverified.
+                    client.handshake()
+                    resp = client.session.get(url, timeout=30)
                 if resp.status_code != 200:
                     print(f"  ? {url} -> HTTP {resp.status_code}")
                     unverified.add(id(row))
@@ -210,9 +228,11 @@ def main() -> int:
         print("    every trap found so far was invisible in the title.")
     if any(not e and s.best.venue == "ebay" for s, _, _, e in rows[:args.limit]):
         print()
-        print("  ~ eBay ceiling is capacity-mixed, so it OVERSTATES a "
-              "base-capacity handset.")
-        print("    Treat those margins as an upper bound, not a target.")
+        print("  ~ eBay ceiling is capacity-mixed. Measured against "
+              "capacity-specific queries it")
+        print("    ran from -1% to +70% off, so it is not a bound in "
+              "either direction -")
+        print("    it is a placeholder until that capacity is fetched.")
     return 0
 
 
