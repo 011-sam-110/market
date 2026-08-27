@@ -51,9 +51,13 @@ class Knobs:
     min_margin_pct_bp: int = 2500          # 25%
     min_margin_fixed_pence: int = 600      # £6
 
-    # 2 -- sell-through threshold, basis points of listings sold in the window.
-    # CHOSEN, not measured -- see the module docstring.
-    str_threshold_bp: int = 5000           # 50%
+    # 2 -- sell-through threshold, compared against metrics.str_window_bp:
+    # Sigma(delta_sold) / known_count x 10000, in basis points. This is
+    # units sold per listing in the window, not a share of listings sold --
+    # it is UNBOUNDED (a listing that resells more than once during the
+    # window pushes the ratio past 10000bp/100%). CHOSEN, not measured --
+    # see the module docstring.
+    str_threshold_bp: int = 5000           # 50%, i.e. half a unit sold per listing on average
 
     # 3 -- retail price range, landed (item + postage).
     price_from_pence: int = 1500           # £15

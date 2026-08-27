@@ -108,7 +108,7 @@ class Metrics:
     str_lifetime: float | None
     str_lifetime_denominator: int         # == sold_known
     velocity_day1: float | None           # sold per day, from listed_at
-    velocity_day1_denominator: int        # rows with sold_qty AND listed_at
+    velocity_day1_denominator: int        # rows with sold_qty AND listed_at AND age_days > 0
 
     # demand, windowed -- the only figure knob 2 may be compared against
     str_window_bp: int | None             # basis points; None when no second snapshot
@@ -275,7 +275,7 @@ def compute(rows: Sequence[Mapping], *,
     joined_rows = [r for r in rows if r.get("store_joined") is not None]
     new_account_denominator = len(joined_rows)
     if new_account_denominator:
-        today = now.date() if hasattr(now, "date") else now
+        today = now.date()
         new_accounts = sum(
             1 for r in joined_rows
             if (today - r["store_joined"]).days < _NEW_ACCOUNT_DAYS
@@ -354,14 +354,19 @@ def check(m: Metrics, knobs: Knobs, *,
     # expected-price basis (price_median) yields a positive max_cost, i.e. a
     # supplier price exists that clears the margin floor. Falls back to the
     # conservative (price_floor) basis only when no median price was seen.
-    margin_value = (max_cost_at_median_pence if max_cost_at_median_pence is not None
+    using_median_basis = max_cost_at_median_pence is not None
+    margin_value = (max_cost_at_median_pence if using_median_basis
                     else max_cost_at_floor_pence)
+    margin_denominator = (m.price_median_denominator if using_median_basis
+                           else m.price_floor_denominator)
+    margin_basis_note = ("max_cost at price_median_pence" if using_median_basis
+                          else "max_cost at price_floor_pence (no median price observed)")
     results.append(KnobResult(
         knob="min_margin", value=margin_value, threshold=0,
         passed=None if margin_value is None else margin_value > 0,
-        denominator=m.price_median_denominator,
-        coverage=_coverage(m.price_median_denominator, m.n_listings),
-        note="max_cost at price_median_pence; positive means a supplier "
+        denominator=margin_denominator,
+        coverage=_coverage(margin_denominator, m.n_listings),
+        note=f"{margin_basis_note}; positive means a supplier "
              "price exists that clears the margin",
     ))
 
@@ -422,11 +427,18 @@ def check(m: Metrics, knobs: Knobs, *,
 
     # 6 -- market saturation cap. Distinct sellers at the best identity
     # tier -- this module has no identity knowledge, so the caller supplies
-    # the count (phoneloop.identity + board.py compute it).
+    # the count (phoneloop.identity + board.py compute it). There is no row
+    # population behind this knob (it is one caller-supplied scalar, not a
+    # fraction over `rows`), so `denominator`/`coverage` here mean "was the
+    # count supplied at all" (1/1.0) rather than "how many of n_listings are
+    # known" -- NOT the competitor count itself. That keeps a real
+    # `competitors=0` (zero rivals found, a known and possibly passing
+    # result) from presenting as denominator=0, which `check()`'s own rule
+    # reserves for "unknown".
     results.append(KnobResult(
         knob="saturation", value=competitors, threshold=knobs.max_competitors,
         passed=None if competitors is None else competitors <= knobs.max_competitors,
-        denominator=competitors or 0,
+        denominator=1 if competitors is not None else 0,
         coverage=1.0 if competitors is not None else 0.0,
         note="" if competitors is not None else "competitor count not supplied",
     ))

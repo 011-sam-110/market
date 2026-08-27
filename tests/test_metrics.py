@@ -415,6 +415,26 @@ class TestCheck:
         assert high.passed is False
         assert unknown.passed is None
 
+    def test_saturation_zero_competitors_is_known_not_a_zero_denominator(self):
+        """competitors=0 is a real, known result (no rivals found at the
+        best identity tier) and passes trivially -- but the old code set
+        `denominator=competitors or 0`, so a known-zero collided with the
+        check() docstring's own rule that a zero denominator means
+        "unknown". denominator must track whether the count was supplied,
+        not the count's value.
+        """
+        m = compute([])
+        zero = next(r for r in check(m, Knobs(), competitors=0) if r.knob == "saturation")
+        assert zero.passed is True
+        assert zero.denominator == 1
+        assert zero.coverage == pytest.approx(1.0)
+
+        none_supplied = next(r for r in check(m, Knobs(), competitors=None)
+                             if r.knob == "saturation")
+        assert none_supplied.passed is None
+        assert none_supplied.denominator == 0
+        assert none_supplied.coverage == pytest.approx(0.0)
+
     def test_min_margin_pass_fail_and_unknown(self):
         m = compute([])
         knobs = Knobs()
@@ -426,6 +446,59 @@ class TestCheck:
         assert clears.passed is True
         assert fails.passed is False
         assert unknown.passed is None
+
+    def test_min_margin_floor_basis_names_itself_and_carries_the_floor_denominator(self):
+        """One business row -> price_floor_denominator = min(5, 1) = 1 and
+        price_median_denominator = 1 too, but they must not be conflated:
+        calling check() with ONLY max_cost_at_floor_pence (no
+        max_cost_at_median_pence) must report the floor basis in `note` and
+        the floor's own denominator/coverage, never the median's -- even
+        though both happen to be 1 here, this pins the branch, not the
+        coincidence. See test_min_margin_floor_basis_denominator_differs_
+        from_median below for a case where they actually differ.
+        """
+        m = compute([_row(source_id="1", seller_type="business", total_pence=2000)])
+        assert m.price_floor_denominator == 1
+        result = next(r for r in check(m, Knobs(), max_cost_at_floor_pence=1500)
+                     if r.knob == "min_margin")
+        assert result.value == 1500
+        assert result.passed is True
+        assert "price_floor_pence" in result.note
+        assert "price_median_pence" not in result.note
+        assert result.denominator == m.price_floor_denominator == 1
+        assert result.coverage == pytest.approx(1.0)
+
+    def test_min_margin_floor_basis_denominator_differs_from_median(self):
+        """A private-seller-only niche: business_landed is empty, so BOTH
+        price_median_denominator and price_floor_denominator are 0 -- but
+        before the fix, check() hard-wired price_median_denominator into
+        every min_margin result regardless of which basis was actually
+        used, and mislabelled the note as median even on the floor branch.
+        This reproduces the reviewer's exact repro: a real, known
+        max_cost_at_floor_pence must not come back mislabelled.
+        """
+        m = compute([_row(source_id="1", seller_type="private", total_pence=2000)])
+        result = next(r for r in check(m, Knobs(), max_cost_at_floor_pence=1500)
+                     if r.knob == "min_margin")
+        assert result.value == 1500
+        assert result.passed is True
+        assert "price_floor_pence" in result.note
+        assert result.denominator == m.price_floor_denominator == 0
+        assert result.coverage == pytest.approx(0.0)
+
+    def test_min_margin_median_basis_still_used_when_supplied(self):
+        """When the caller supplies max_cost_at_median_pence, the median
+        basis and its own denominator/coverage are used, unchanged from
+        before the fix -- pins that the branch selection itself (median
+        wins when both could apply) was not disturbed.
+        """
+        m = compute([_row(source_id="1", seller_type="business", total_pence=2000)])
+        result = next(r for r in check(m, Knobs(), max_cost_at_median_pence=1832,
+                                        max_cost_at_floor_pence=1500)
+                     if r.knob == "min_margin")
+        assert result.value == 1832
+        assert "price_median_pence" in result.note
+        assert result.denominator == m.price_median_denominator
 
     def test_a_zero_denominator_is_none_never_false(self):
         """Every rows-derived knob on an empty population must read
