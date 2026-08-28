@@ -1,0 +1,236 @@
+{
+  "_generated_at": "2026-08-28T01:17:44.783257+00:00",
+  "_source": {
+    "all_categories": "https://www.ebay.co.uk/n/all-categories",
+    "department_page": "https://www.ebay.co.uk/b/x/{category_id}",
+    "leaf_page": "https://www.ebay.co.uk/b/{bn_id}"
+  },
+  "departments": {
+    "home_furniture_diy": {
+      "title": "Home, Furniture & DIY",
+      "category_id": "11700",
+      "leaves": [
+        {
+          "category_id": "26677",
+          "title": "Bathroom Fixtures, Accessories & Supplies"
+        },
+        {
+          "category_id": "20444",
+          "title": "Home Bedding"
+        },
+        {
+          "category_id": "262975",
+          "title": "Candles & Home Fragrance"
+        },
+        {
+          "category_id": "16086",
+          "title": "Celebration & Occasion Supplies"
+        }
+      ]
+    },
+    "garden_patio": {
+      "title": "Garden & Patio",
+      "category_id": "159912",
+      "leaves": [
+        {
+          "category_id": "25863",
+          "title": "Patio & Garden Furniture"
+        },
+        {
+          "category_id": "180995",
+          "title": "Gazebos & Pergolas"
+        },
+        {
+          "category_id": "139956",
+          "title": "Garden Sheds & Summerhouses"
+        },
+        {
+          "category_id": "149242",
+          "title": "Outdoor Heating, Cooking & Eating"
+        },
+        {
+          "category_id": "42154",
+          "title": "Garden Lighting"
+        }
+      ]
+    },
+    "pet_supplies": {
+      "title": "Pet Supplies",
+      "category_id": "1281",
+      "leaves": [
+        {
+          "category_id": "116881",
+          "title": "Beekeeping Supplies"
+        },
+        {
+          "category_id": "20734",
+          "title": "Bird Supplies"
+        },
+        {
+          "category_id": "259318",
+          "title": "Pet Cameras"
+        },
+        {
+          "category_id": "20737",
+          "title": "Cat Supplies"
+        },
+        {
+          "category_id": "20742",
+          "title": "Dog Supplies"
+        }
+      ]
+    },
+    "sporting_goods": {
+      "title": "Sporting Goods",
+      "category_id": "888",
+      "leaves": [
+        {
+          "category_id": "261242",
+          "title": "American Football Gear"
+        },
+        {
+          "category_id": "20835",
+          "title": "Archery Equipment"
+        },
+        {
+          "category_id": "106460",
+          "title": "Badminton Equipment"
+        },
+        {
+          "category_id": "16021",
+          "title": "Baseball & Softball Equipment"
+        },
+        {
+          "category_id": "21194",
+          "title": "Basketball Equipment"
+        }
+      ]
+    },
+    "vehicle_accessories": {
+      "title": "Vehicle Parts & Accessories",
+      "category_id": "131090",
+      "leaves": [
+        {
+          "category_id": "179448",
+          "title": "Car Care & Cleaning Products"
+        },
+        {
+          "category_id": "107059",
+          "title": "Car Tuning & Styling Parts"
+        },
+        {
+          "category_id": "179680",
+          "title": "Car Tyres"
+        },
+        {
+          "category_id": "6747",
+          "title": "Vehicle Clothing, Protection & Merchandise"
+        }
+      ]
+    },
+    "mobile_phone_accessories": {
+      "title": "Mobile Phones & Communication",
+      "category_id": "15032",
+      "leaves": [
+        {
+          "category_id": "136699",
+          "title": "Dummy Mobile Phones"
+        },
+        {
+          "category_id": "3286",
+          "title": "Home Phones & Accessories"
+        },
+        {
+          "category_id": "9355",
+          "title": "Mobile Phones & Smartphones"
+        },
+        {
+          "category_id": "9394",
+          "title": "Mobile Phone Accessories"
+        },
+        {
+          "category_id": "43304",
+          "title": "Mobile Phone Parts"
+        }
+      ]
+    },
+    "crafts": {
+      "title": "Crafts",
+      "category_id": "14339",
+      "leaves": [
+        {
+          "category_id": "11783",
+          "title": "Painting, Drawing & Art Supplies"
+        },
+        {
+          "category_id": "134304",
+          "title": "Basketry & Chair Caning Supplies"
+        },
+        {
+          "category_id": "31723",
+          "title": "Beads & Jewellery Making Supplies"
+        },
+        {
+          "category_id": "183683",
+          "title": "Candle Making & Soap Making Supplies"
+        },
+        {
+          "category_id": "28145",
+          "title": "Children's Craft Supplies"
+        }
+      ]
+    },
+    "health_beauty": {
+      "title": "Health & Beauty",
+      "category_id": "26395",
+      "leaves": [
+        {
+          "category_id": "11838",
+          "title": "Bath & Body Products"
+        },
+        {
+          "category_id": "183497",
+          "title": "Electronic Smoking, Parts & Accessories"
+        },
+        {
+          "category_id": "180345",
+          "title": "Fragrances & Aftershaves"
+        },
+        {
+          "category_id": "11854",
+          "title": "Hair Care & Styling Products"
+        },
+        {
+          "category_id": "67588",
+          "title": "Healthcare Products"
+        }
+      ]
+    },
+    "toys_games": {
+      "title": "Toys & Games",
+      "category_id": "220",
+      "leaves": [
+        {
+          "category_id": "246",
+          "title": "Action Figures & Accessories"
+        },
+        {
+          "category_id": "49019",
+          "title": "Beanies"
+        },
+        {
+          "category_id": "183446",
+          "title": "Construction & Building Toys"
+        },
+        {
+          "category_id": "80546",
+          "title": "Creative Toys & Activities"
+        },
+        {
+          "category_id": "222",
+          "title": "Diecast Vehicles, Parts & Accessories"
+        }
+      ]
+    }
+  }
+}
