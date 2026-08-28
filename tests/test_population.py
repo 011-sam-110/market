@@ -94,6 +94,28 @@ def two_date_store(tmp_path):
 
 
 @pytest.fixture
+def reobserved_store(tmp_path):
+    """One UTC day, but two listings observed TWICE within it.
+
+    This is what the live store looks like: overlapping shards inside one
+    pass wrote 31,251 rows for 29,602 listings. A fixture without a
+    re-observation cannot tell a deduped query from an undeduped one.
+    """
+    s = MarketStore(tmp_path)
+    s.record([
+        _row("r1", LEAF_A, "sellerA", datetime(2026, 8, 20, 9, 0, tzinfo=UTC)),
+        _row("r2", LEAF_A, "sellerB", datetime(2026, 8, 20, 9, 0, tzinfo=UTC)),
+        _row("r3", LEAF_B, "sellerC", datetime(2026, 8, 20, 9, 0, tzinfo=UTC)),
+    ])
+    s.record([
+        _row("r1", LEAF_A, "sellerA", datetime(2026, 8, 20, 9, 40, tzinfo=UTC),
+             price_pence=3400),
+        _row("r2", LEAF_A, "sellerB", datetime(2026, 8, 20, 9, 40, tzinfo=UTC)),
+    ])
+    return s
+
+
+@pytest.fixture
 def sparse_seller_store(tmp_path):
     """A leaf whose seller column is 5% present, beside one that is complete.
 
@@ -267,17 +289,30 @@ class TestEmptyStore:
 
 
 class TestSqlAgreesWithRowsOn:
-    def test_sql_and_rows_on_agree(self, one_date_store, knobs, tmp_path):
-        """The provenance count and `rows_on` must be the same population.
-        Without the newest-per-source_id window the raw table overstates the
-        listing count, and every figure on the page divides by it."""
+    def test_sql_and_rows_on_agree(self, reobserved_store, knobs, tmp_path):
+        """The SQL panels and `rows_on` must be the same population.
+
+        eBay is an always-snapshot source, so one listing can be written
+        several times in a single day: the live store holds 31,251 rows
+        against 29,602 listings. Without the newest-per-source_id window in
+        `_LATEST` every count(*) on the page overstates by that difference,
+        and every rate divides by the wrong denominator. The fixture carries
+        a same-day re-observation for exactly that reason -- a fixture where
+        each listing appears once cannot tell the two apart."""
         from phoneloop import population
 
         b = population.build(tmp_path, knobs)
         payload, reason = population.panel_provenance(b)
         assert reason is None
-        assert payload["listings"] == len(one_date_store.rows_on(b.day))
+        # The raw table really is bigger than the population, so the
+        # assertions below are not vacuous.
+        assert payload["raw_rows"] > payload["listings"]
+        assert payload["listings"] == len(reobserved_store.rows_on(b.day))
         assert payload["listings"] == len(b.rows)
+        # A panel counting rows rather than distinct ids must land on the
+        # same number -- this is the one that breaks if the window is lost.
+        landed, _ = population.panel_landed_price(b)
+        assert landed["n"] == len(b.rows)
 
 
 class TestWriteReport:
