@@ -125,6 +125,16 @@ ALT_SELLER_ORDER_ROW_URL = "https://www.ebay.co.uk/itm/177815541337?_skw=iphone+
 NO_SELLER_LINE_ROW = "Apple iPhone 13 128GB 256GB 512GB Unlocked Refurb Smartphone Excellent Condition\nOpens in a new window or tab\nExcellent - Refurbished\n£309.89\n+ £21.66 postage estimate\nRefurbished\nderosnopS"
 NO_SELLER_LINE_ROW_URL = "https://www.ebay.co.uk/itm/389156180455?_skw=iphone+13+128gb&epid=15049284953&itmmeta=01M12MQ4PVXWCMWPDWYZ3QMZGD&hash=item5a9b8411e7:g:aRUAAOSwDMJnZZ4N"
 
+# --- rows recorded 2026-08-28, garden category (sacat 139956) ---------------
+# Both carry the word NEW at the front and only ONE of them is a badge. They
+# are here together deliberately: they are the pair that decides whether the
+# strip is written as "NEW LISTING" exactly or as a looser leading-NEW rule.
+# See TestTitleIsNotABadge for the measurement behind that choice.
+NEW_LISTING_ROW = "NEW LISTINGzacurter Garden Tool Storage Rack Wall Mounted Shed Storage Solutions Garage\nOpens in a new window or tab\nBrand new\n£24.00\nBuy It Now\nFree delivery in 3 days\nGet it by Wed 2 Sep\nFree returns\nedodean_67 98.8% positive (80)\nderosnopS"
+NEW_LISTING_ROW_URL = "https://www.ebay.co.uk/itm/377452038288?itmmeta=01M1411P8BNN8GYD8AHX86ZQJP&hash=item57e1e50890:g:FzQAAeSwRUZqkK8v"
+
+NEW_IS_PART_OF_THE_TITLE_ROW = "NEW Genuine Toomax Storaway Spare Replacement Parts\nOpens in a new window or tab\nBrand new\n£3.99 to £19.99\nBuy It Now\n+£2.99 delivery\ncharmainesellsitall 99.8% positive (10.7K)\nderosnopS"
+
 
 class TestMoney:
     def test_reads_pounds_and_pence(self):
@@ -543,6 +553,56 @@ class TestPromoted:
         captured the same day without it."""
         assert parse_row(UK_USED).promoted is False
         assert parse_row(UK_WATCHED).promoted is False
+
+
+class TestTitleIsNotABadge:
+    """The first line of a row is not reliably the title.
+
+    Measured over the 4,288 rows recorded up to 2026-08-28: 142 of them (3.3%)
+    carry something ahead of the title, and the something is not enumerable --
+    promo badges (NEW LOW PRICE 68, GREAT PRICE 11, "20% OFF", "56% OFF") sit
+    alongside bare brand labels (Google, Huawei, Motorola, Xiaomi, Redmi,
+    Samsung, Apple, DOOGEE, PDKUAI, FDGAO). A blocklist of badge words would
+    have to enumerate every brand eBay sells, so it is the wrong shape.
+
+    "Opens in a new window or tab" is on 100% of those 4,288 rows -- it is the
+    accessibility suffix of the same anchor element whose text is the title --
+    so the title is the line immediately before it.
+
+    That anchor does not catch the second shape: NEW LISTING is glued onto the
+    title with no separator at all. Its prefix set was measured, not guessed,
+    by taking the rows where eBay ALSO repeats the title as "- <title>" and
+    reading off what sits in front of the repeat; across 423 such rows the
+    only glued prefix is "NEW LISTING" (28). A bare leading "NEW " must NOT be
+    stripped -- "NEW Apple iPhone 13 ... 24 Month Warranty" is a real seller
+    title, the English rendering of a German listing's "NEU".
+    """
+
+    def test_a_promo_badge_on_its_own_line_is_not_the_title(self):
+        row = parse_row(LAST_ONE_ROW, LAST_ONE_ROW_URL)
+        assert row.title == "Apple iPhone 13 128GB Blue Unlocked"
+
+    def test_a_brand_label_on_its_own_line_is_not_the_title(self):
+        """The 142 prefixed rows are brands as often as badges."""
+        row = parse_row(ALT_SELLER_ORDER_ROW, ALT_SELLER_ORDER_ROW_URL)
+        assert row.title == (
+            "REDMI 10 Power 128 GB 8 GB RAM Orange-Factory Unlocked Phone-NO TARIFF TO USA"
+        )
+
+    def test_a_glued_new_listing_badge_is_stripped(self):
+        row = parse_row(NEW_LISTING_ROW, NEW_LISTING_ROW_URL)
+        assert row.title == (
+            "zacurter Garden Tool Storage Rack Wall Mounted Shed Storage Solutions Garage"
+        )
+
+    def test_a_seller_title_beginning_new_is_left_alone(self):
+        """Guards the over-strip: "NEW " here is the seller's own word."""
+        assert parse_row(NEW_IS_PART_OF_THE_TITLE_ROW).title == (
+            "NEW Genuine Toomax Storaway Spare Replacement Parts"
+        )
+
+    def test_an_unprefixed_row_is_unchanged(self):
+        assert parse_row(UK_USED).title.startswith("Apple iPhone 13 128GB White")
 
 
 class TestStockHint:

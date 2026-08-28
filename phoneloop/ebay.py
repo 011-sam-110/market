@@ -282,6 +282,52 @@ def _is_promoted(text: str) -> bool:
     return text.rstrip().endswith(_PROMOTED_SUFFIX)
 
 
+# --- title ---------------------------------------------------------------
+
+# The row's first line is NOT reliably the title, and the exceptions cannot be
+# listed. Measured over the 4,288 rows recorded to 2026-08-28, 142 (3.3%) put
+# something ahead of it: promo badges (NEW LOW PRICE 68, GREAT PRICE 11,
+# "20% OFF", "56% OFF") and, just as often, a bare brand label -- Google,
+# Huawei, Motorola, Xiaomi, Redmi, Samsung, Apple, DOOGEE, PDKUAI, FDGAO. A
+# badge blocklist would have to enumerate every brand eBay sells.
+#
+# So anchor on structure instead. "Opens in a new window or tab" is the
+# accessibility suffix of the anchor element whose own text is the title, and
+# it was present on 100% of those 4,288 rows. The title is the line before it.
+_TITLE_ANCHOR = "Opens in a new window or tab"
+
+# One badge is glued on with no separator, so the anchor above cannot see it.
+# The prefix set was read off eBay's own second rendering of the same string
+# (it repeats the title later as "- <title>"): across the 423 rows carrying
+# both, the only glued prefix is "NEW LISTING", on 28 of them.
+#
+# It is matched EXACTLY, never as a looser leading "NEW ". 4 of those 423 rows
+# are titles like "NEW Genuine Toomax Storaway Spare Replacement Parts", where
+# NEW is the seller's own word -- on iPhone rows it is the English rendering
+# of a German listing's "NEU". Stripping that would corrupt a real title.
+_GLUED_BADGES = ("NEW LISTING",)
+
+
+def _title_from_lines(lines: list[str]) -> str:
+    """The listing title, with any badge or brand label in front removed.
+
+    Falls back to the first line when the anchor is absent, so a future layout
+    that drops it degrades to the old behaviour rather than to an empty title.
+    """
+    if not lines:
+        return ""
+    try:
+        anchor = lines.index(_TITLE_ANCHOR)
+    except ValueError:
+        anchor = -1
+    # anchor at 0 would make lines[anchor - 1] the LAST line, not the title
+    title = lines[anchor - 1] if anchor > 0 else lines[0]
+    for badge in _GLUED_BADGES:
+        if title.startswith(badge):
+            return title[len(badge):].strip()
+    return title
+
+
 # --- delivery ETA --------------------------------------------------------
 
 # None of these three phrasings appeared on any of the 528 real rows captured
@@ -447,7 +493,7 @@ def parse_row(text: str, url: str = "", *, today: date | None = None) -> EbayLis
     seller_id, feedback_bp, feedback_n = _seller_from_lines(lines)
 
     return EbayListing(
-        title=lines[0] if lines else "",
+        title=_title_from_lines(lines),
         price_pence=price,
         delivery_pence=delivery,
         condition=condition,
