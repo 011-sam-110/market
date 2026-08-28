@@ -558,24 +558,28 @@ class TestPromoted:
 class TestTitleIsNotABadge:
     """The first line of a row is not reliably the title.
 
-    Measured over the 4,288 rows recorded up to 2026-08-28: 142 of them (3.3%)
-    carry something ahead of the title, and the something is not enumerable --
-    promo badges (NEW LOW PRICE 68, GREAT PRICE 11, "20% OFF", "56% OFF") sit
-    alongside bare brand labels (Google, Huawei, Motorola, Xiaomi, Redmi,
-    Samsung, Apple, DOOGEE, PDKUAI, FDGAO). A blocklist of badge words would
-    have to enumerate every brand eBay sells, so it is the wrong shape.
+    Measured over all 31,649 rows of the complete 43-hub sweep (2026-08-28):
+    837 carry something ahead of the title, and the something is not
+    enumerable -- promo badges (NEW LOW PRICE 566, GREAT PRICE 93, "20% OFF",
+    "56% OFF") sit alongside bare brand labels (Google, Huawei, Motorola,
+    Xiaomi, Redmi, Samsung, Apple, DOOGEE, PDKUAI, FDGAO). A blocklist of
+    badge words would have to enumerate every brand eBay sells.
 
-    "Opens in a new window or tab" is on 100% of those 4,288 rows -- it is the
-    accessibility suffix of the same anchor element whose text is the title --
-    so the title is the line immediately before it.
+    "Opens in a new window or tab" is on 100% of those 31,649 rows, across all
+    43 categories -- it is the accessibility suffix of the same anchor element
+    whose text is the title -- so the title is the line immediately before it.
 
     That anchor does not catch the second shape: NEW LISTING is glued onto the
-    title with no separator at all. Its prefix set was measured, not guessed,
-    by taking the rows where eBay ALSO repeats the title as "- <title>" and
-    reading off what sits in front of the repeat; across 423 such rows the
-    only glued prefix is "NEW LISTING" (28). A bare leading "NEW " must NOT be
-    stripped -- "NEW Apple iPhone 13 ... 24 Month Warranty" is a real seller
-    title, the English rendering of a German listing's "NEU".
+    title with no separator at all (981 rows). Its prefix set was measured,
+    not guessed, by taking the rows where eBay ALSO repeats the title as
+    "- <title>" and reading off what sits in front of the repeat; across 2,367
+    such rows the only glued prefix is "NEW LISTING" (115). A bare leading
+    "NEW " must NOT be stripped -- "NEW Genuine Toomax Storaway Spare
+    Replacement Parts" is a real seller title, and on iPhone rows the leading
+    NEW is the English rendering of a German listing's "NEU".
+
+    Applied to the whole corpus the rule corrects 1,818 titles (5.7%) and
+    empties none.
     """
 
     def test_a_promo_badge_on_its_own_line_is_not_the_title(self):

@@ -285,26 +285,30 @@ def _is_promoted(text: str) -> bool:
 # --- title ---------------------------------------------------------------
 
 # The row's first line is NOT reliably the title, and the exceptions cannot be
-# listed. Measured over the 4,288 rows recorded to 2026-08-28, 142 (3.3%) put
-# something ahead of it: promo badges (NEW LOW PRICE 68, GREAT PRICE 11,
-# "20% OFF", "56% OFF") and, just as often, a bare brand label -- Google,
-# Huawei, Motorola, Xiaomi, Redmi, Samsung, Apple, DOOGEE, PDKUAI, FDGAO. A
-# badge blocklist would have to enumerate every brand eBay sells.
+# listed. Measured over all 31,649 rows of the complete 43-hub sweep
+# (2026-08-28): 837 put something ahead of it -- promo badges (NEW LOW PRICE
+# 566, GREAT PRICE 93, "20% OFF", "56% OFF") and, just as often, a bare brand
+# label: Google, Huawei, Motorola, Xiaomi, Redmi, Samsung, Apple, DOOGEE,
+# PDKUAI, FDGAO. A badge blocklist would have to enumerate every brand eBay
+# sells, so it is the wrong shape.
 #
 # So anchor on structure instead. "Opens in a new window or tab" is the
 # accessibility suffix of the anchor element whose own text is the title, and
-# it was present on 100% of those 4,288 rows. The title is the line before it.
+# it is present on 100% of those 31,649 rows -- across all 43 categories
+# swept, not just the handful the rule was first drawn from. The title is the
+# line immediately before it.
 _TITLE_ANCHOR = "Opens in a new window or tab"
 
-# One badge is glued on with no separator, so the anchor above cannot see it.
-# The prefix set was read off eBay's own second rendering of the same string
-# (it repeats the title later as "- <title>"): across the 423 rows carrying
-# both, the only glued prefix is "NEW LISTING", on 28 of them.
+# One badge is glued on with no separator, so the anchor above cannot see it
+# (981 rows). The prefix set was read off eBay's OWN second rendering of the
+# same string -- it repeats the title later as "- <title>" -- rather than
+# guessed: across the 2,367 rows carrying both renderings, "NEW LISTING" is
+# the only glued prefix (115).
 #
-# It is matched EXACTLY, never as a looser leading "NEW ". 4 of those 423 rows
-# are titles like "NEW Genuine Toomax Storaway Spare Replacement Parts", where
-# NEW is the seller's own word -- on iPhone rows it is the English rendering
-# of a German listing's "NEU". Stripping that would corrupt a real title.
+# It is matched EXACTLY, never as a looser leading "NEW ". Rows like "NEW
+# Genuine Toomax Storaway Spare Replacement Parts" are real seller titles,
+# and on iPhone rows the leading NEW is eBay's English rendering of a German
+# listing's "NEU". Stripping those would corrupt a real title.
 _GLUED_BADGES = ("NEW LISTING",)
 
 
@@ -554,6 +558,53 @@ def _origin_country(listing: EbayListing) -> str | None:
     if listing.is_uk:
         return "GB"
     return _ORIGIN_COUNTRY_CODES.get(listing.ships_from.strip().lower())
+
+
+# --- the price band is part of the niche, so it has to reach the row -------
+
+# A niche is "leaf x price band" (spec section 5), and the sweep filters on a
+# band (`_udlo`/`_udhi` -- the "15-55" in a search_key). The shard was written
+# as "<category>/p<n>", dropping the band entirely, while board.rank_niches
+# groups on leaf_category_id alone.
+#
+# With one band swept that is invisible. With two it is silently wrong: both
+# bands become one niche and every niche-level figure -- median price,
+# sell-through, competitor count -- describes a blend of the two, with
+# nothing going red. Sweeping a second band is planned, not hypothetical:
+# the ASP band is knob 3.
+#
+# So the band rides in the shard, and the niche key is (leaf, band).
+_BAND_SEP = "/"
+
+
+def shard_for(term: str, lo: int, hi: int, pgn: int) -> str:
+    """The shard string stored on every row of one swept page."""
+    return f"{term}{_BAND_SEP}{lo}-{hi}{_BAND_SEP}p{pgn}"
+
+
+def band_of(shard: str) -> str | None:
+    """The price band a shard was swept under, or None if it predates this.
+
+    Rows written before this change read "16086/p1" -- two parts, no band --
+    and come back None ("band unknown") rather than raising or, worse,
+    reporting a band they never carried.
+    """
+    parts = (shard or "").split(_BAND_SEP)
+    if len(parts) < 3:
+        return None
+    return parts[1] or None
+
+
+def niche_key(leaf_category_id: str, shard: str) -> str:
+    """The niche a row belongs to: leaf x band, never leaf x page.
+
+    Page is a fetch detail -- pages 1 and 3 of one band are one niche. A row
+    with no band recorded keys on the leaf alone, which is exactly the old
+    behaviour, so a store holding both formats degrades per-row instead of
+    splitting one real niche into a banded and an unbanded half.
+    """
+    band = band_of(shard)
+    return f"{leaf_category_id}@{band}" if band else str(leaf_category_id)
 
 
 def to_row(listing: EbayListing, *, category: str, shard: str,

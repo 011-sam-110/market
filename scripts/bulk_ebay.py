@@ -105,8 +105,8 @@ from phoneloop import catalog, config, harness, proxies  # noqa: E402
 from phoneloop.browser import launch as launch_browser  # noqa: E402
 from phoneloop import ebay_item  # noqa: E402
 from phoneloop.ebay import (  # noqa: E402
-    DEFAULT_PRICE_FROM, DEFAULT_PRICE_TO, is_browse_redirect, parse_rows,
-    search_key, search_url,
+    DEFAULT_PRICE_FROM, DEFAULT_PRICE_TO, band_of, is_browse_redirect,
+    niche_key, parse_rows, search_key, search_url, shard_for,
     to_row, uk_share,
 )
 from phoneloop.harness import Cassette, recorded  # noqa: E402
@@ -236,6 +236,12 @@ def rows_for(listings, category: str, shard: str,
     return [to_row(listing, category=category, shard=shard,
                    leaf_category_id=leaf_category_id)
            for listing in listings]
+
+
+# The band-aware shard and niche key live in phoneloop.ebay so that
+# phoneloop.board can group on exactly the key this sweep writes; they are
+# imported at the top of this module and re-exported here only so the sweep
+# reads in one place.
 
 
 def fetch_item(page, url: str) -> dict:
@@ -567,7 +573,8 @@ def main() -> int:
                 listings = parse_rows(raw)
 
                 share = uk_share(listings)
-                rows = rows_for(listings, slug, f"{term}/p{pgn}", leaf_cat_id)
+                rows = rows_for(listings, slug, shard_for(term, lo, hi, pgn),
+                                leaf_cat_id)
                 written = store.record(rows)
                 ids = {r["source_id"] for r in rows}
                 new = len(ids - cat_unique)

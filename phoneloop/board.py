@@ -49,7 +49,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from phoneloop import catalog_ebay, fees, identity
+from phoneloop import catalog_ebay, ebay, fees, identity
 from phoneloop import metrics as metrics_mod
 from phoneloop.knobs import Knobs
 from phoneloop.market_store import MarketStore
@@ -159,18 +159,28 @@ def rank_niches(store: MarketStore, knobs: Knobs, *,
     deltas = _deltas_for_metrics(difference)
     top_level_of = catalog_ebay.top_level_of()
 
+    # Grouped on ebay.niche_key -- leaf x price band -- not the leaf alone.
+    # Two bands of one leaf are two niches; a row written before the band was
+    # stored keys on its leaf, exactly as it used to.
     groups: dict[str, list[dict]] = {}
+    leaf_of: dict[str, str] = {}
     for r in rows:
         leaf = r.get("leaf_category_id")
         if not leaf:
             continue
-        groups.setdefault(leaf, []).append(r)
+        key = ebay.niche_key(leaf, r.get("shard") or "")
+        groups.setdefault(key, []).append(r)
+        leaf_of[key] = leaf
 
     board_rows = []
-    for leaf, niche_rows in groups.items():
+    for key, niche_rows in groups.items():
+        leaf = leaf_of[key]
+        band = ebay.band_of(niche_rows[0].get("shard") or "")
         seller_ids = {r.get("seller_id") for r in niche_rows if r.get("seller_id")}
         board_rows.append(_build_row(
-            key=leaf, label=f"leaf:{leaf}", level="niche", identity_tier="none",
+            key=key,
+            label=f"leaf:{leaf}" + (f" £{band}" if band else ""),
+            level="niche", identity_tier="none",
             rows=niche_rows, knobs=knobs, deltas=deltas, leaf_category_id=leaf,
             competitors=len(seller_ids), top_level_of=top_level_of,
         ))
