@@ -32,17 +32,27 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from urllib.parse import quote_plus, urlsplit
+from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from phoneloop import harness, proxies  # noqa: E402
+from phoneloop.ebay import (  # noqa: E402
+    DEFAULT_PRICE_FROM, DEFAULT_PRICE_TO, search_key, search_url,
+)
 from phoneloop.harness import Cassette, recorded  # noqa: E402
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-SEARCH_URL = "https://www.ebay.co.uk/sch/i.html?_nkw={q}&_ipg=60&_pgn={pgn}"
+# The URL and the harness key are phoneloop.ebay.search_url / .search_key --
+# the same functions scripts/bulk_ebay.py fetches with -- so a page captured
+# here satisfies that script's replay lookup for the identical (mode, term,
+# price band, page). They used to be built independently in each script and
+# had drifted (integration review, 2026-08-28); see phoneloop/ebay.py's
+# module docstring for what that broke and phoneloop/../scripts/bulk_ebay.py
+# for the remaining gap this alone does not close (a fresh recording session
+# under the now-aligned shape).
 NAV_TIMEOUT_MS = 60000
 PAUSE_S = 5.0
 
@@ -117,7 +127,7 @@ def open_session(pw):
 
 
 def fetch_search(page, query: str, pgn: int) -> list[dict]:
-    url = SEARCH_URL.format(q=quote_plus(query), pgn=pgn)
+    url = search_url("nkw", query, DEFAULT_PRICE_FROM, DEFAULT_PRICE_TO, pgn)
     page.goto(url, timeout=NAV_TIMEOUT_MS, wait_until="load")
     page.wait_for_timeout(3500)
     body = page.inner_text("body")
@@ -182,7 +192,7 @@ def main() -> int:
             queries = [("iphone 13 128gb", 1), ("iphone 13 128gb", 2),
                       ("wireless charger", 1)]
             for query, pgn in queries:
-                name = f"search:{query}:p{pgn}"
+                name = search_key("nkw", query, DEFAULT_PRICE_FROM, DEFAULT_PRICE_TO, pgn)
                 rows = recorded(cassette, "ebay", name,
                                 lambda q=query, p=pgn: fetch_search(page, q, p))
                 print(f"  search {query!r} p{pgn}: {len(rows)} rows")

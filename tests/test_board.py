@@ -112,9 +112,12 @@ class TestRankNiches:
         fees.max_cost. If board.py's `top_level_of = catalog_ebay.top_level_of()`
         wiring is ever dropped (reverted to `top_level_of=None`), this row's
         max_cost silently jumps to the fallback-rate figure and this test
-        catches that even though test_max_cost_comes_from_fees_not_reimplemented
-        above would not (that test recomputes its own expectation the same
-        wrong way board.py would, if board.py were wrong)."""
+        catches that directly by comparing against the fallback rate itself.
+        (test_max_cost_comes_from_fees_not_reimplemented above also catches
+        the same regression, since it threads the real top_level_of into its
+        own expectation rather than recomputing board.py's fallback -- the
+        two tests are watched red together below, not offered as
+        alternatives.)"""
         rows = board.rank_niches(two_niche_store, knobs)
         good = next(r for r in rows if r.key == LEAF_GOOD)
         assert good.metrics.price_floor_pence is not None

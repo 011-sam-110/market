@@ -30,33 +30,42 @@ REM store, so a step that fails here can simply be re-run -- by hand, or by
 REM tomorrow's 03:00 trigger -- and it picks up where it left off rather
 REM than redoing completed work.
 REM
-REM ASSUMED CLI, checked at integration (2026-08-28):
+REM ASSUMED CLI, checked at integration (2026-08-28, round 2):
 REM   --leaf-sweep     is s2's own flag; argparse accepts it and it takes the
 REM                     shape this file assumes. The section 6.3 offline
 REM                     end-to-end run ("bulk_ebay.py --leaf-sweep
-REM                     --max-pages 3 --fresh") does NOT get past its first
-REM                     shard against the merged tree: scripts/record_ebay.py
-REM                     records keyword search pages (_ipg=60, no price
-REM                     band), while --leaf-sweep fetches a different URL
-REM                     shape (_sacat=, _ipg=240, a price band) under a
-REM                     different cassette key, so no recording satisfies the
-REM                     first shard and it raises MissingRecording -- correct
-REM                     per contracts section 6.3 ("a missing recording
-REM                     raises rather than producing an empty board"), but it
-REM                     means this flag is unverified end to end offline.
+REM                     --max-pages 3 --fresh") still does NOT get past its
+REM                     first shard against fixtures/ebay/ as they exist
+REM                     today: scripts/record_ebay.py and scripts/bulk_ebay.py
+REM                     now build the SAME URL and the SAME cassette key
+REM                     (phoneloop.ebay.search_url / .search_key, round-2
+REM                     integration fix -- they used to drift, see
+REM                     phoneloop/ebay.py's module docstring), but the
+REM                     recordings under PHONELOOP_FIXTURES were captured
+REM                     BEFORE that fix, under the old narrower shape, so
+REM                     they still raise MissingRecording -- correct per
+REM                     contracts section 6.3 ("a missing recording raises
+REM                     rather than producing an empty board"), and this flag
+REM                     remains unverified end to end offline until a fresh
+REM                     recording session runs under the now-aligned code.
 REM                     See the integration report's unverified[].
-REM   --deepen          CONFIRMED NOT TO EXIST: `bulk_ebay.py --deepen`
-REM                     fails argparse ("unrecognized arguments: --deepen").
-REM                     No accepted stream wired a Tier-2 driver -- s2 owns
-REM                     ebay_item.py's item-page parser (parse_item,
-REM                     to_row_updates) and s3 (ebay_api.py's getItem call)
-REM                     was not accepted -- so there is nothing to point
-REM                     this at yet, and inventing a flag/script here would
-REM                     be new feature work, not an integration fix. The
-REM                     DEEPEN step below is skipped rather than left in to
-REM                     crash the 03:00 trigger every night; see the SKIP
-REM                     block's own comment. Re-enable it, one line, once a
-REM                     real Tier-2 driver ships.
+REM   --deepen          NOW SHIPPED (round-2 integration fix): scripts/
+REM                     bulk_ebay.py's `run_deepen` wires ebay_item.py's
+REM                     item-page parser (parse_item, to_row_updates) into
+REM                     MarketStore -- reads the latest snapshot's rows
+REM                     lacking seller_type, replays/fetches each item page
+REM                     under the same `item:{url}` name scripts/
+REM                     record_ebay.py records under, and merges the result
+REM                     back (extra JSON merged, not clobbered -- see
+REM                     ebay_item.to_row_updates's docstring). Unit-tested in
+REM                     tests/test_bulk_ebay_deepen.py (row selection) and
+REM                     tests/test_ebay_item.py (the merge itself, against
+REM                     real recorded item pages where real data exercises
+REM                     it). Depends on the SWEEP step above having already
+REM                     populated the store for today -- on an empty store it
+REM                     prints "0 listings to deepen" and exits 0 rather than
+REM                     failing, so it is safe to run daily even on a day
+REM                     SWEEP found nothing new.
 
 setlocal enabledelayedexpansion
 
@@ -75,23 +84,21 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [run_daily] %DATE% %TIME% -- [1/2] SWEEP
+echo [run_daily] %DATE% %TIME% -- [1/3] SWEEP
 "%PY%" scripts\bulk_ebay.py --leaf-sweep
 if errorlevel 1 (
     echo [run_daily] SWEEP failed -- checkpointed, safe to re-run
     exit /b 1
 )
 
-REM DEEPEN (Tier 2, item-page enrichment) is skipped -- no accepted stream
-REM ships a script or flag that drives it end to end (see the comment block
-REM above). Skipping rather than calling a nonexistent `--deepen` keeps this
-REM trigger from failing every night over a step that cannot succeed either
-REM way; sweep + board still run daily on their own data. Restore a DEEPEN
-REM step here, renumbering back to [1/3]/[2/3]/[3/3], once ebay_item.py's
-REM parser (or ebay_api.py's, if s3 lands) is actually wired to a script.
-echo [run_daily] %DATE% %TIME% -- DEEPEN skipped: no Tier-2 driver script exists yet (see comment header)
+echo [run_daily] %DATE% %TIME% -- [2/3] DEEPEN (Tier 2, item-page enrichment)
+"%PY%" scripts\bulk_ebay.py --deepen
+if errorlevel 1 (
+    echo [run_daily] DEEPEN failed -- SWEEP already landed today's rows, safe to re-run
+    exit /b 1
+)
 
-echo [run_daily] %DATE% %TIME% -- [2/2] BOARD (difference runs inside niche_board.py once 2+ snapshot dates exist)
+echo [run_daily] %DATE% %TIME% -- [3/3] BOARD (difference runs inside niche_board.py once 2+ snapshot dates exist)
 "%PY%" scripts\niche_board.py --products --html
 if errorlevel 1 (
     echo [run_daily] BOARD failed

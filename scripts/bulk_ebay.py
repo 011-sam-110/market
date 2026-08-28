@@ -55,9 +55,30 @@ returning an empty page, and that is left to propagate rather than caught
 as "blocked": a gap in the fixtures is a different problem from eBay
 blocking a live request, and conflating them would hide the gap.
 
+The URL and the harness key both come from `phoneloop.ebay.search_url` /
+`.search_key` now, not a copy kept in this file -- scripts/record_ebay.py
+imports the same two functions, so a recording it captures satisfies this
+script's replay lookup for the identical (mode, term, price band, page)
+without either file having to remember to agree (integration review,
+2026-08-28: the two used to build these independently and had drifted --
+different URL shape, different key format -- which is why a fresh offline
+sweep against fixtures/ebay/ still raises `MissingRecording` on the first
+shard: those recordings were captured before this fix, under the old shape.
+A live recording session with the aligned scripts is what closes that gap;
+see this build's unverified[]).
+
+DEEPEN (Tier 2, design spec section 4) is a separate mode, `--deepen`: it
+does not sweep anything. It reads the most recent snapshot's eBay rows
+already in the store, picks the ones with a real listing `url` and no
+`seller_type` yet (never deepened), and merges `phoneloop.ebay_item`'s
+item-page parse onto each via `MarketStore.record` -- see `run_deepen`'s
+docstring below. This is what search-row fields alone can never supply:
+`seller_type`, `listed_at`, brand/MPN/EAN, and the real lifetime sold count.
+
     python scripts/bulk_ebay.py --category phones
     python scripts/bulk_ebay.py --leaf-sweep --max-pages 400
     python scripts/bulk_ebay.py --category phones --direct   # no proxy fallback
+    python scripts/bulk_ebay.py --deepen --deepen-limit 200
     PHONELOOP_HARNESS=replay python scripts/bulk_ebay.py --leaf-sweep --max-pages 3 --fresh
 """
 
@@ -69,29 +90,31 @@ import json
 import sys
 import time
 from pathlib import Path
-from urllib.parse import quote_plus, urlsplit
+from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from phoneloop import catalog, config, harness, proxies  # noqa: E402
-from phoneloop.ebay import parse_rows, to_row, uk_share  # noqa: E402
+from phoneloop import ebay_item  # noqa: E402
+from phoneloop.ebay import (  # noqa: E402
+    DEFAULT_PRICE_FROM, DEFAULT_PRICE_TO, parse_rows, search_key, search_url,
+    to_row, uk_share,
+)
 from phoneloop.harness import Cassette, recorded  # noqa: E402
 from phoneloop.market_store import MarketStore  # noqa: E402
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
+# The URL template and the harness key are phoneloop.ebay.search_url /
+# .search_key now -- shared with scripts/record_ebay.py so the two scripts
+# cannot silently drift apart on request shape again (see phoneloop/ebay.py's
+# module docstring for the drift this integration pass found and fixed).
 # _ipg=240 is the largest page eBay serves. _pgn is the page. _udlo/_udhi are
-# the price band, in pounds -- LH_LocatedIn is gone (see module docstring).
-SEARCH_NKW = ("https://www.ebay.co.uk/sch/i.html?_nkw={term}&_ipg=240&_pgn={page}"
-              "&_udlo={lo}&_udhi={hi}")
-SEARCH_SACAT = ("https://www.ebay.co.uk/sch/i.html?_sacat={term}&_ipg=240&_pgn={page}"
-                "&_udlo={lo}&_udhi={hi}")
-
-# The spec's default retail band (§3, knob 3) -- used only for --leaf-sweep,
-# which carries no per-category band the way phoneloop.catalog.Category does.
-DEFAULT_PRICE_FROM = 15
-DEFAULT_PRICE_TO = 55
+# the price band, in pounds -- LH_LocatedIn is gone (see module docstring
+# above). DEFAULT_PRICE_FROM/TO (the spec's default retail band, §3 knob 3)
+# are used only for --leaf-sweep, which carries no per-category band the way
+# phoneloop.catalog.Category does.
 
 PAUSE_S = 4.0
 NAV_TIMEOUT_MS = 75000
@@ -186,6 +209,120 @@ def rows_for(listings, category: str, shard: str,
            for listing in listings]
 
 
+def fetch_item(page, url: str) -> dict:
+    """One live item-page load -- identical shape to
+    scripts/record_ebay.py's `fetch_item` (same fields, same timeouts) so a
+    recording captured by either satisfies the other's replay."""
+    page.goto(url, timeout=NAV_TIMEOUT_MS, wait_until="load")
+    page.wait_for_timeout(3000)
+    body = page.inner_text("body")
+    if is_blocked(body, page.url):
+        raise RuntimeError(f"blocked fetching item page {url}")
+    return {"text": body, "html": page.content(), "url": page.url}
+
+
+def rows_to_deepen(store: MarketStore, *, limit: int) -> list[dict]:
+    """The most recent snapshot's eBay rows that carry a real item `url` and
+    have never been deepened (`seller_type` still unset) -- capped at
+    `limit`, because a live run spends one page load per row and Tier 2 is a
+    bounded daily budget (design spec section 4), not a full re-crawl.
+
+    Reads via `MarketStore.snapshot_dates` / `.rows_on` -- the same public
+    pair `phoneloop.board._latest_rows` reads the board's current population
+    from -- rather than a new store method, so this stays a caller of
+    MarketStore's existing surface instead of growing a sibling stream's
+    file for one script's convenience.
+    """
+    dates = store.snapshot_dates(source="ebay")
+    if not dates:
+        return []
+    rows = store.rows_on(dates[-1], source="ebay")
+    candidates = [r for r in rows if r.get("url") and not r.get("seller_type")]
+    return candidates[:limit]
+
+
+def run_deepen(store: MarketStore, cassette: Cassette, *, offline: bool,
+               limit: int, headless: bool, direct: bool) -> int:
+    """Tier 2 (design spec section 4): enrich a bounded batch of already-swept
+    eBay listings with what only the item page carries -- `seller_type`,
+    `listed_at`, brand/MPN/EAN, the real lifetime sold count -- none of
+    which a search row ever shows (phoneloop/ebay_item.py's module
+    docstring). Without this, those columns can never populate from any
+    shipped script (integration review, 2026-08-28, blocking finding #2) and
+    every knob that depends on them reads `?` forever.
+
+    For each candidate from `rows_to_deepen`: fetch (or replay) the item page
+    under the SAME harness name scripts/record_ebay.py records it under --
+    `f"item:{url}"` -- parse it with `phoneloop.ebay_item.parse_item`, and
+    merge `to_row_updates` onto the sweep row's own `extra` (passed as
+    `sweep_extra` so the merge -- not a wholesale overwrite -- happens
+    inside `to_row_updates` itself; see that function's docstring for the
+    clobber this closes). The merged row is written back via
+    `MarketStore.record` with `seen_at` cleared to `None` so the store
+    stamps the actual deepen time -- eBay is an always-snapshot source
+    (market_store.py), so this lands as a new, later observation of the same
+    listing rather than mutating the sweep row in place, and reliably
+    outranks it in `rows_on`'s `ORDER BY seen_at DESC`.
+
+    A missing item-page recording for a candidate this function actually
+    asked for propagates as `MissingRecording`, same as the sweep's own
+    handling -- these are targeted lookups (rows this run chose to deepen),
+    not a scan of "whatever happens to be recorded", so a gap here is a real
+    gap, not a normal empty result (contracts section 6.3).
+    """
+    candidates = rows_to_deepen(store, limit=limit)
+    print(f"{len(candidates)} listing{'s' if len(candidates) != 1 else ''} "
+          f"to deepen (latest snapshot, capped at {limit})")
+    if not candidates:
+        return 0
+
+    deepened = 0
+    with contextlib.ExitStack() as stack:
+        page = None
+        if not offline:
+            from playwright.sync_api import sync_playwright
+            pw = stack.enter_context(sync_playwright())
+            browser, page, used_proxy = open_session(
+                pw, headless=headless, force_direct=direct)
+            stack.callback(lambda: browser.close())
+            print(f"egress: {'proxy' if used_proxy else 'DIRECT'}")
+
+        for row in candidates:
+            url = row["url"]
+            try:
+                data = recorded(cassette, "ebay_item", f"item:{url}",
+                                lambda u=url: fetch_item(page, u))
+            except harness.MissingRecording:
+                # A gap in the fixtures for a URL this run specifically
+                # targeted -- must propagate, not be swallowed (module
+                # docstring above; contracts section 6.3).
+                raise
+            except Exception as exc:                     # noqa: BLE001
+                print(f"   {url} -> BLOCKED {str(exc)[:80]}")
+                continue
+
+            item = ebay_item.parse_item(data.get("text", ""),
+                                        html=data.get("html", ""),
+                                        url=data.get("url") or url)
+            if item is None:
+                print(f"   {url} -> no parseable item id, skipped")
+                continue
+            updates = ebay_item.to_row_updates(item, sweep_extra=row.get("extra"))
+            if not updates:
+                print(f"   {url} -> item page carried nothing new")
+                continue
+
+            merged = dict(row)
+            merged.update(updates)
+            merged["seen_at"] = None
+            written = store.record([merged])
+            deepened += 1
+            print(f"   {url} -> {sorted(updates)} (+{written} stored)")
+
+    print(f"\ndeepened {deepened}/{len(candidates)} listings")
+    return 0
+
+
 def leaf_targets() -> list[tuple[str, str, str]]:
     """(slug, title, leaf_category_id) for every in-scope leaf.
 
@@ -223,13 +360,28 @@ def main() -> int:
     ap.add_argument("--headless", action="store_true")
     ap.add_argument("--checkpoint", type=Path, default=None)
     ap.add_argument("--fresh", action="store_true")
+    ap.add_argument("--deepen", action="store_true",
+                    help="Tier 2: enrich already-swept listings from their "
+                         "item pages, instead of sweeping (see run_deepen)")
+    ap.add_argument("--deepen-limit", type=int, default=200,
+                    help="max listings to deepen per run, --deepen only")
     args = ap.parse_args()
 
-    if not args.category and not args.leaf_sweep:
+    if not args.category and not args.leaf_sweep and not args.deepen:
         args.category = [c.slug for c in catalog.CATEGORIES]
 
     cfg = config.load()
     store = MarketStore(cfg.DATA_DIR, max_bytes=cfg.MAX_STORE_BYTES)
+
+    if args.deepen:
+        cassette = Cassette()
+        offline = harness.mode() == harness.REPLAY
+        print(f"harness: {harness.mode()}"
+              + (f", {len(cassette.keys('ebay_item'))} ebay_item recordings "
+                 f"under {cassette.root}" if offline else ""))
+        return run_deepen(store, cassette, offline=offline,
+                          limit=args.deepen_limit, headless=args.headless,
+                          direct=args.direct)
 
     cp_path = args.checkpoint or (cfg.DATA_DIR / "bulk_ebay_checkpoint.json")
     checkpoint: dict = {}
@@ -289,7 +441,7 @@ def main() -> int:
         for mode, term, slug, leaf_cat_id, lo, hi in targets:
             cat_unique: set[str] = set()
             for pgn in range(1, MAX_PAGE + 1):
-                key = f"{mode}:{term}:{lo}-{hi}:p{pgn}"
+                key = search_key(mode, term, lo, hi, pgn)
                 if key in done:
                     continue
                 if len(cat_unique) >= cap:
@@ -300,9 +452,7 @@ def main() -> int:
                     print("   page budget spent")
                     return _finish(store, cp_path, checkpoint, total_unique, started)
 
-                template = SEARCH_SACAT if mode == "sacat" else SEARCH_NKW
-                url = template.format(term=quote_plus(term) if mode == "nkw" else term,
-                                      page=pgn, lo=lo, hi=hi)
+                url = search_url(mode, term, lo, hi, pgn)
 
                 try:
                     raw = recorded(cassette, "ebay", key,

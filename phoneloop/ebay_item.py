@@ -270,16 +270,24 @@ def parse_item(text: str, *, html: str = "", url: str = "") -> EbayItem | None:
     )
 
 
-def to_row_updates(item: EbayItem) -> dict:
+def to_row_updates(item: EbayItem, *, sweep_extra: str | dict | None = None) -> dict:
     """The subset of ROW_FIELDS an item page can fill, for merging onto a
     sweep row (build contract §2.5) -- only keys this parser has an actual
     opinion on, so merging never clobbers a search row's own good data with
-    an item-page absence.
+    an item-page absence. The intended caller shape is
+    `row.update(to_row_updates(item, sweep_extra=row.get("extra")))`.
 
     `qty_available_is_floor` is not a ROW_FIELDS column; it rides in `extra`
-    as its own JSON object. A caller merging this onto a sweep row's `extra`
-    must merge the JSON, not overwrite the sweep row's `extra` wholesale --
-    `ebay.to_row` already put aspects/watchers/stock_hint there.
+    as its own JSON object. Earlier revisions returned that JSON as a
+    wholesale replacement and left it to the caller to merge it onto the
+    sweep row's own `extra` (aspects/watchers/stock_hint, already put there
+    by `ebay.to_row`) -- documented as a caller obligation, but no caller
+    existed to honour it (integration review, 2026-08-28, nit: the one
+    caller that exists now, scripts/bulk_ebay.py's `run_deepen`, would have
+    silently destroyed those fields on `row.update(...)` otherwise). Pass
+    the sweep row's current `extra` as `sweep_extra` -- a JSON string, an
+    already-parsed dict, or None for a row with none -- and this function
+    does the merge itself, so `row.update(...)` is safe again.
     """
     updates: dict = {}
     if item.sold_qty is not None:
@@ -311,6 +319,16 @@ def to_row_updates(item: EbayItem) -> dict:
     if item.store_items_sold is not None:
         updates["store_items_sold"] = item.store_items_sold
     if item.qty_available_is_floor:
-        updates["extra"] = json.dumps({"qty_available_is_floor": True},
-                                      separators=(",", ":"))
+        base: dict = {}
+        if isinstance(sweep_extra, str) and sweep_extra:
+            try:
+                parsed = json.loads(sweep_extra)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, dict):
+                base = parsed
+        elif isinstance(sweep_extra, dict):
+            base = dict(sweep_extra)
+        base["qty_available_is_floor"] = True
+        updates["extra"] = json.dumps(base, separators=(",", ":"))
     return updates

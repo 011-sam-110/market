@@ -40,10 +40,54 @@ import re
 import statistics
 from dataclasses import dataclass, field
 from datetime import date
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import quote_plus, urlsplit, urlunsplit
 
 from phoneloop import market_store
 from phoneloop.parser import parse as _parse_model
+
+# --- search request shape, shared with scripts/bulk_ebay.py and
+# scripts/record_ebay.py ----------------------------------------------------
+# The single source of truth for the URL a live eBay search request uses and
+# the harness key it is recorded/replayed under. The two scripts used to
+# build these independently and drifted apart -- bulk_ebay.py's leaf-sweep
+# moved to `_ipg=240` plus a price band while record_ebay.py kept capturing
+# `_ipg=60` with no band, under a completely different key format -- so a
+# page recorded by one could never satisfy a replay lookup from the other.
+# That drift is exactly what made contracts section 6.3's offline
+# end-to-end run impossible (integration review, 2026-08-28): "Different
+# URLs AND different keys, so no honest re-keying of the existing
+# recordings exists." Fixing the naming here does not, by itself, make the
+# recordings captured before this fix usable -- they were captured under the
+# old, narrower shape and a fresh recording session is still needed (see
+# scripts/bulk_ebay.py's module docstring and this build's unverified[]) --
+# but it stops the two scripts from being able to drift apart again, since
+# neither one owns its own copy of the URL or the key any more.
+DEFAULT_PRICE_FROM = 15    # pounds -- the spec's default retail band (design spec §3, knob 3)
+DEFAULT_PRICE_TO = 55
+
+_SEARCH_URL_NKW = ("https://www.ebay.co.uk/sch/i.html?_nkw={term}&_ipg=240&_pgn={page}"
+                    "&_udlo={lo}&_udhi={hi}")
+_SEARCH_URL_SACAT = ("https://www.ebay.co.uk/sch/i.html?_sacat={term}&_ipg=240&_pgn={page}"
+                      "&_udlo={lo}&_udhi={hi}")
+
+
+def search_key(mode: str, term: str, lo: int, hi: int, pgn: int) -> str:
+    """The `name` both scripts pass to `harness.recorded(cassette, "ebay",
+    name, produce)` for the same (mode, term, price band, page) -- identical
+    wording so a page scripts/record_ebay.py captures replays under
+    scripts/bulk_ebay.py, and vice versa. `mode` is "nkw" (keyword) or
+    "sacat" (numeric leaf category id)."""
+    return f"{mode}:{term}:{lo}-{hi}:p{pgn}"
+
+
+def search_url(mode: str, term: str, lo: int, hi: int, pgn: int) -> str:
+    """The live URL for the same (mode, term, price band, page) `search_key`
+    names. `term` is percent-encoded for `mode="nkw"` (a free-text query);
+    `mode="sacat"` terms are numeric category ids and need no encoding."""
+    template = _SEARCH_URL_SACAT if mode == "sacat" else _SEARCH_URL_NKW
+    encoded = quote_plus(term) if mode == "nkw" else term
+    return template.format(term=encoded, page=pgn, lo=lo, hi=hi)
+
 
 _PRICE_RE = re.compile(r"£\s*([\d,]+\.\d{2})")
 _DELIVERY_RE = re.compile(r"\+\s*£\s*([\d,]+\.\d{2})\s*(?:delivery|postage)", re.I)

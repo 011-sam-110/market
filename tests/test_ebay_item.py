@@ -287,3 +287,42 @@ class TestToRowUpdates:
         assert updates["sold_qty"] == 2858
         assert updates["seller_id"] == "the_ioutlet_extra"
         assert updates["leaf_category_id"] == "9355"
+
+    def test_the_floor_flag_merges_onto_the_sweep_rows_extra_not_over_it(self):
+        """Guard for the integration wiring itself (integration review,
+        2026-08-28, nit): `ebay.to_row` already stamps aspects/watchers/
+        stock_hint into a sweep row's `extra` before an item page is ever
+        fetched. `row.update(to_row_updates(item, sweep_extra=row["extra"]))`
+        -- the caller shape this function's own docstring names -- must not
+        lose them. If `to_row_updates` ever goes back to returning
+        `qty_available_is_floor` as a wholesale replacement (ignoring
+        `sweep_extra`), this fails: `aspects` disappears from the merged
+        JSON instead of surviving alongside the new flag."""
+        sweep_extra = json.dumps(
+            {"aspects": ["Pre-owned", "Apple iPhone 13"], "watchers": 12,
+             "ships_from": "United Kingdom", "stock_hint": "low_stock"},
+            separators=(",", ":"),
+        )
+        item = EbayItem(item_id="1", qty_available=3, qty_available_is_floor=True)
+        updates = to_row_updates(item, sweep_extra=sweep_extra)
+        merged = json.loads(updates["extra"])
+        assert merged["qty_available_is_floor"] is True
+        assert merged["aspects"] == ["Pre-owned", "Apple iPhone 13"]
+        assert merged["watchers"] == 12
+        assert merged["ships_from"] == "United Kingdom"
+        assert merged["stock_hint"] == "low_stock"
+
+    def test_the_floor_flag_merges_onto_an_already_parsed_dict_too(self):
+        item = EbayItem(item_id="1", qty_available=3, qty_available_is_floor=True)
+        updates = to_row_updates(item, sweep_extra={"watchers": 7})
+        merged = json.loads(updates["extra"])
+        assert merged == {"watchers": 7, "qty_available_is_floor": True}
+
+    def test_no_sweep_extra_still_returns_the_bare_flag(self):
+        """Unchanged behaviour for a sweep row with no `extra` at all (or
+        the default `to_row_updates(item)` call with no `sweep_extra`) --
+        this is the exact case test_the_floor_flag_rides_in_extra_as_its_
+        own_json_not_a_column above already pins; repeated here as the
+        `sweep_extra=None` boundary of the merge, not a duplicate."""
+        item = EbayItem(item_id="1", qty_available=3, qty_available_is_floor=True)
+        assert to_row_updates(item, sweep_extra=None) == to_row_updates(item)
