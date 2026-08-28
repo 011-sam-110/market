@@ -35,17 +35,32 @@ browser and a proxy.
 
 from __future__ import annotations
 
+import json
 import re
 import statistics
 from dataclasses import dataclass, field
+from datetime import date
+from urllib.parse import urlsplit, urlunsplit
 
+from phoneloop import market_store
 from phoneloop.parser import parse as _parse_model
 
 _PRICE_RE = re.compile(r"£\s*([\d,]+\.\d{2})")
 _DELIVERY_RE = re.compile(r"\+\s*£\s*([\d,]+\.\d{2})\s*(?:delivery|postage)", re.I)
-_FREE_RE = re.compile(r"\bfree\b.{0,24}\b(?:delivery|postage)", re.I)
+# Anchored to the START of a line, not `.search()`ed over the whole row: a
+# live listing (the_ioutlet_extra's template, measured on 11 of 528 real rows,
+# 2026-08-27) carries the promotional banner line "12 Months Warranty - Fast &
+# Free Delivery - Unlocked" ahead of a REAL "+£30.00 delivery" charge later in
+# the same row. The old un-anchored pattern matched "free... delivery" inside
+# that banner and booked the charge as 0 -- a wrong known beats nothing on
+# every other line in this module, but here it was a wrong known that hid a
+# real one three lines later. A genuine free-delivery statement ("Free
+# international postage") always opens its own line; the banner never does.
+_FREE_RE = re.compile(r"^free\b.{0,24}\b(?:delivery|postage)", re.I)
 _UNSPECIFIED_RE = re.compile(r"(?:postage|delivery)\s+not\s+specified", re.I)
-_WATCHERS_RE = re.compile(r"(\d[\d,]*)\s+watch(?:ers|ing)", re.I)
+# "48+ watchers" (a live page, 2026-08-27) has a "+" the original pattern did
+# not expect, so it silently fell back to 0 watchers on every such row.
+_WATCHERS_RE = re.compile(r"(\d[\d,]*)\+?\s+watch(?:ers|ing)", re.I)
 # "from Germany" is a shipping origin. "from £107.98 with coupon" is the price
 # range on a multi-variant listing, and the first version of this pattern read
 # that as a country -- so a UK listing with variant pricing was booked as
@@ -83,6 +98,173 @@ def to_pence(text: str) -> int | None:
     return round(float(m.group(1).replace(",", "")) * 100) if m else None
 
 
+# --- decoy row -------------------------------------------------------------
+
+# eBay's search results page renders a hidden template `<li>` ahead of the
+# real rows, pointing at /itm/123456. It parses cleanly -- it has a price and
+# a title -- so nothing else in this module would catch it; only the item id
+# gives it away.
+DECOY_ITEM_IDS: frozenset[str] = frozenset({"123456"})
+
+_ITEM_ID_RE = re.compile(r"/itm/(\d+)")
+_EPID_RE = re.compile(r"[?&]epid=(\d+)")
+
+
+def _item_id_from_url(url: str) -> str:
+    m = _ITEM_ID_RE.search(url or "")
+    return m.group(1) if m else ""
+
+
+def _epid_from_url(url: str) -> str:
+    m = _EPID_RE.search(url or "")
+    return m.group(1) if m else ""
+
+
+def is_decoy(url: str) -> bool:
+    """Is this href the hidden template row rather than a real listing?"""
+    return _item_id_from_url(url) in DECOY_ITEM_IDS
+
+
+# --- sold count, stock hints -------------------------------------------------
+
+# "552+ sold", "1,424+ sold", "76 sold" -- all measured live, 2026-08-27. The
+# "+" means "at least this many" and is dropped; the digits are kept exactly.
+# No match is unknown, never zero: a row that genuinely says "0 sold" is a
+# real zero and must come back as 0, not None.
+_SOLD_RE = re.compile(r"([\d,]+)\+?\s*sold\b", re.I)
+
+# eBay's own stock-pressure copy. Recorded verbatim rather than folded into a
+# quantity -- "Almost gone" is not a number, and turning it into one would be
+# inventing data that was never on the page.
+_STOCK_HINTS = ("Almost gone", "Last one")
+
+
+def _sold_qty(text: str) -> int | None:
+    m = _SOLD_RE.search(text)
+    return int(m.group(1).replace(",", "")) if m else None
+
+
+def _stock_hint(text: str) -> str:
+    for hint in _STOCK_HINTS:
+        if hint in text:
+            return hint
+    return ""
+
+
+# --- seller line -------------------------------------------------------------
+
+# Two orderings were measured live on the same day, 2026-08-27, across 528
+# rows from seven search pages: "jaessentials 99.8% positive (74.6K)" on 409
+# of them (the contract's documented shape) and "one.stop.shoppee (3,503)
+# 98.6%" -- percentage and count swapped -- on 65. The remaining 54 rows carry
+# no seller line at all (a "people also viewed" style recommendation card with
+# no feedback shown); that is a real absence, not a parse failure.
+_SELLER_PRIMARY_RE = re.compile(
+    r"^([A-Za-z0-9][\w.\-]*)\s+([\d.]+)%\s*positive\s*\(([\d,.]+[KM]?)\)\s*$",
+    re.I,
+)
+_SELLER_ALT_RE = re.compile(
+    r"^([A-Za-z0-9][\w.\-]*)\s*\(([\d,.]+[KM]?)\)\s*([\d.]+)%\s*$",
+    re.I,
+)
+
+
+def expand_abbreviated_count(raw: str) -> int:
+    """"74.6K" -> 74600, "1.7K" -> 1700, "3,503" -> 3503, "273K" -> 273000.
+
+    eBay abbreviates any count above 1,000 to one decimal place, so a K/M
+    figure is accurate to roughly +/-50 above that threshold, never exact --
+    shared by every count this module reads off a K/M-abbreviated line
+    (feedback counts here, store lifetime sales in ebay_item.py).
+    """
+    s = raw.replace(",", "").upper()
+    if s.endswith("K"):
+        return round(float(s[:-1]) * 1_000)
+    if s.endswith("M"):
+        return round(float(s[:-1]) * 1_000_000)
+    return int(float(s))
+
+
+def pct_to_bp(raw: str) -> int:
+    """"99.8" -> 9980, "100" -> 10000, "0" -> 0. Shared with ebay_item.py."""
+    return round(float(raw) * 100)
+
+
+def _seller_from_lines(lines: list[str]) -> tuple[str, int | None, int | None]:
+    """(seller_id, feedback_bp, feedback_n) from whichever ordering is on the
+    row, or ("", None, None) when no seller line is present at all."""
+    for ln in lines:
+        m = _SELLER_PRIMARY_RE.match(ln)
+        if m:
+            return m.group(1), pct_to_bp(m.group(2)), expand_abbreviated_count(m.group(3))
+        m = _SELLER_ALT_RE.match(ln)
+        if m:
+            return m.group(1), pct_to_bp(m.group(3)), expand_abbreviated_count(m.group(2))
+    return "", None, None
+
+
+# --- promoted flag -----------------------------------------------------------
+
+# eBay renders "Sponsored" reversed ("derosnopS") so it cannot be selected as
+# text, but the DOM's innerText still carries it -- measured on literally all
+# 528 rows across seven live search pages captured 2026-08-27 (every query,
+# every page). Whether that reflects this crawl's specific conditions or a
+# genuinely all-sponsored results set is unverified; either way the marker is
+# real and is parsed, never stripped -- the pre-existing fixtures in
+# tests/test_ebay.py (captured the same day, without the marker) are the
+# promoted=False case.
+_PROMOTED_SUFFIX = "derosnopS"
+
+
+def _is_promoted(text: str) -> bool:
+    return text.rstrip().endswith(_PROMOTED_SUFFIX)
+
+
+# --- delivery ETA --------------------------------------------------------
+
+# None of these three phrasings appeared on any of the 528 real rows captured
+# for this build (2026-08-27) -- eBay did not show a delivery estimate on this
+# particular sweep. They are the design spec's own documented copy (§2.4 of
+# the build contract) and are exercised directly against that literal text
+# rather than through a page recording; see tests/test_ebay.py and
+# unverified[] in the build report.
+_GET_IT_BY_RE = re.compile(r"Get it by\s+[A-Za-z]+,?\s+(\d{1,2})\s+([A-Za-z]+)", re.I)
+_ETA_RANGE_RE = re.compile(r"(\d+)\s*[-–]\s*(\d+)\s*days?\b", re.I)
+_ETA_SINGLE_RE = re.compile(r"\bin\s+(\d+)\s+days?\b", re.I)
+
+_MONTHS = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+
+
+def _eta_days(text: str, today: date | None) -> int | None:
+    """Maximum promised delivery days. Pure: never reads the clock itself --
+    "Get it by <date>" needs `today` to turn a date into a day count, and
+    without one it honestly returns None rather than guessing a year."""
+    m = _GET_IT_BY_RE.search(text)
+    if m:
+        if today is None:
+            return None
+        month = _MONTHS.get(m.group(2)[:3].lower())
+        if month is None:
+            return None
+        try:
+            target = date(today.year, month, int(m.group(1)))
+        except ValueError:
+            return None
+        if target < today:
+            target = date(today.year + 1, month, int(m.group(1)))
+        return (target - today).days
+
+    m = _ETA_RANGE_RE.search(text)
+    if m:
+        return max(int(m.group(1)), int(m.group(2)))
+
+    m = _ETA_SINGLE_RE.search(text)
+    return int(m.group(1)) if m else None
+
+
 @dataclass(frozen=True)
 class EbayListing:
     title: str
@@ -94,6 +276,16 @@ class EbayListing:
     watchers: int = 0
     ships_from: str = ""            # empty means UK
     url: str = ""
+    # added by s2 -- every one defaults, so existing constructions keep working
+    item_id: str = ""                       # from the /itm/ URL
+    sold_qty: int | None = None             # "1,283 sold" -> 1283; absent -> None, NEVER 0
+    seller_id: str = ""                     # "jaessentials"
+    seller_feedback_bp: int | None = None   # "99.8% positive" -> 9980
+    seller_feedback_n: int | None = None    # "(74.6K)" -> 74600
+    promoted: bool = False                  # row text ends with the reversed word "derosnopS"
+    eta_days: int | None = None             # max promised delivery days
+    epid: str = ""                          # from an epid= href on the row
+    stock_hint: str = ""                    # "Almost gone" | "Last one" | ""
 
     @property
     def landed_pence(self) -> int | None:
@@ -143,11 +335,16 @@ class EbayListing:
         return "pre-owned" in c or "refurb" in c or "open box" in c
 
 
-def parse_row(text: str, url: str = "") -> EbayListing | None:
+def parse_row(text: str, url: str = "", *, today: date | None = None) -> EbayListing | None:
     """Parse one search-result row's visible text.
 
-    Returns None when there is no usable price, rather than inventing one.
+    Returns None for the hidden /itm/123456 decoy row, and for any row with
+    no usable price, rather than inventing one. Stays pure -- `today` is a
+    parameter, not `date.today()`, so a "Get it by <date>" ETA is reproducible
+    from a fixture instead of changing answer with the calendar.
     """
+    if is_decoy(url):
+        return None
     if not text:
         return None
     price = to_pence(text)
@@ -157,7 +354,7 @@ def parse_row(text: str, url: str = "") -> EbayListing | None:
     lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
 
     delivery: int | None = None
-    if _FREE_RE.search(text):
+    if any(_FREE_RE.match(ln) for ln in lines):
         delivery = 0
     else:
         m = _DELIVERY_RE.search(text)
@@ -185,6 +382,7 @@ def parse_row(text: str, url: str = "") -> EbayListing | None:
 
     watchers_m = _WATCHERS_RE.search(text)
     from_m = _FROM_RE.search(text)
+    seller_id, feedback_bp, feedback_n = _seller_from_lines(lines)
 
     return EbayListing(
         title=lines[0] if lines else "",
@@ -196,19 +394,102 @@ def parse_row(text: str, url: str = "") -> EbayListing | None:
         watchers=int(watchers_m.group(1).replace(",", "")) if watchers_m else 0,
         ships_from="" if not from_m else from_m.group(1).strip(),
         url=url,
+        item_id=_item_id_from_url(url),
+        sold_qty=_sold_qty(text),
+        seller_id=seller_id,
+        seller_feedback_bp=feedback_bp,
+        seller_feedback_n=feedback_n,
+        promoted=_is_promoted(text),
+        eta_days=_eta_days(text, today),
+        epid=_epid_from_url(url),
+        stock_hint=_stock_hint(text),
     )
 
 
-def parse_rows(rows) -> list[EbayListing]:
-    """Parse many rows, skipping any that yield nothing usable."""
+def parse_rows(rows, *, today: date | None = None) -> list[EbayListing]:
+    """Parse many rows, dropping decoys and anything that yields nothing usable."""
     out = []
     for row in rows:
         text = row.get("text", "") if isinstance(row, dict) else str(row)
         url = row.get("href", "") if isinstance(row, dict) else ""
-        listing = parse_row(text, url)
+        listing = parse_row(text, url, today=today)
         if listing is not None:
             out.append(listing)
     return out
+
+
+# --- ROW_FIELDS ----------------------------------------------------------
+
+# eBay's HTML shows a shipping country as a name ("from Germany"), not the
+# alpha-2 code origin_country wants (build contract §1.1, col 32). Only names
+# actually seen on a live UK results page, 2026-08-27, are mapped; an
+# unmapped name comes back None rather than a guessed code, because a wrong
+# code is worse downstream than an absent one.
+_ORIGIN_COUNTRY_CODES = {
+    "germany": "DE", "united states": "US", "switzerland": "CH",
+    "italy": "IT", "spain": "ES", "india": "IN", "lithuania": "LT",
+    "australia": "AU", "hong kong": "HK",
+}
+
+
+def _origin_country(listing: EbayListing) -> str | None:
+    if listing.is_uk:
+        return "GB"
+    return _ORIGIN_COUNTRY_CODES.get(listing.ships_from.strip().lower())
+
+
+def to_row(listing: EbayListing, *, category: str, shard: str,
+           leaf_category_id: str | None = None) -> dict:
+    """One EbayListing -> the shared ROW_FIELDS dict.
+
+    Built from market_store.empty_row() rather than a literal (build contract
+    §2.4), so a column this parser has nothing to say about comes back NULL
+    instead of silently missing from the dict entirely.
+
+    `stock_hint` is not a ROW_FIELDS column -- it rides in `extra` along with
+    the other row-level leftovers (aspects, watchers, the raw ships_from
+    text), never promoted into a numeric field it is not.
+    """
+    row = market_store.empty_row("ebay", listing.item_id)
+    extra = {
+        "aspects": list(listing.aspects),
+        "watchers": listing.watchers,
+        "ships_from": listing.ships_from,
+        "stock_hint": listing.stock_hint,
+    }
+    url = urlunsplit(urlsplit(listing.url)._replace(query="", fragment="")) if listing.url else None
+    row.update({
+        "category": category,
+        "shard": shard,
+        "title": listing.title or None,
+        "price_pence": listing.price_pence,
+        "total_pence": listing.landed_pence,
+        "currency": "GBP",
+        "condition": listing.condition or None,
+        "model": listing.catalogue_model,
+        "storage_gb": listing.storage_gb,
+        "kind": "ask",
+        "available": True,
+        "region": "GB" if listing.is_uk else None,
+        "seller_id": listing.seller_id or None,
+        "url": url,
+        "extra": json.dumps(extra, separators=(",", ":")),
+        "sold_qty": listing.sold_qty,
+        "seller_feedback_bp": listing.seller_feedback_bp,
+        "seller_feedback_n": listing.seller_feedback_n,
+        "epid": listing.epid or None,
+        # eBay attaches epid= to a search-row href precisely when it has
+        # matched the listing to a catalogue product -- the same signal the
+        # Browse API exposes as itemSummary.epid (spec §5's "catalogued"
+        # tier). The HTML transport never sees an *inferred* epid (that is
+        # getItem-only), so any epid this transport finds is the exact kind.
+        "identity_tier": "catalogued" if listing.epid else None,
+        "origin_country": _origin_country(listing),
+        "promoted": listing.promoted,
+        "leaf_category_id": leaf_category_id,
+        "eta_days": listing.eta_days,
+    })
+    return row
 
 
 @dataclass(frozen=True)
