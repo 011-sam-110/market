@@ -96,6 +96,18 @@ class TestSoldAndAvailable:
         assert _parse(IOUTLET).sold_qty == 2858
 
 
+# None of the six real item pages this build recorded showed "More than N
+# available" -- eBay renders it only above some inventory threshold none of
+# the six crossed. Hand-typed against eBay's own documented phrasing (build
+# contract §2.5, spec's worked example), not lifted from a page recording --
+# named SYNTHETIC_* per the standing rule; see unverified[] in the build
+# report.
+SYNTHETIC_MORE_THAN_AVAILABLE_PAGE = (
+    "A listing\neBay item number:111222333444\n"
+    "Quantity:\nMore than 10 available\nBuy It Now\n"
+)
+
+
 class TestMoreThanAvailableFloor:
     """None of the six real item pages this build recorded showed "More
     than N available" -- eBay renders it only above some inventory
@@ -104,11 +116,8 @@ class TestMoreThanAvailableFloor:
     worked example) rather than a page recording; see unverified[] in the
     build report."""
 
-    def test_the_floor_flag_is_set(self):
-        item = parse_item(
-            "A listing\neBay item number:111222333444\n"
-            "Quantity:\nMore than 10 available\nBuy It Now\n"
-        )
+    def test_synthetic_the_floor_flag_is_set(self):
+        item = parse_item(SYNTHETIC_MORE_THAN_AVAILABLE_PAGE)
         assert item.qty_available == 10
         assert item.qty_available_is_floor is True
 

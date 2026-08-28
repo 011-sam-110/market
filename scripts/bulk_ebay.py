@@ -95,8 +95,8 @@ DEFAULT_PRICE_TO = 55
 
 PAUSE_S = 4.0
 NAV_TIMEOUT_MS = 75000
-# catalog.result_cap("ebay") // 240, rounded up, plus one -- the page budget
-# a single shard could ever need before it is either saturated or exhausted.
+# ceil(catalog.result_cap("ebay") / 240) -- the page budget a single shard
+# could ever need before it is either saturated or exhausted.
 MAX_PAGE = 42
 
 _ROW_JS = """() => {
@@ -338,14 +338,20 @@ def main() -> int:
                     time.sleep(PAUSE_S * 4)
                     break
 
-                listings = parse_rows(raw)
-                if not listings:
+                if not raw:
                     # The saturation test (build contract §2.4/§4): the page
-                    # came back with zero rows. This is what "done" as an
-                    # empty shard actually means -- never a block.
+                    # itself came back with zero row elements. This is what
+                    # "done" as an empty shard actually means -- never a
+                    # block. Checked against `raw` (the DOM rows the page JS
+                    # matched), not the post-parse `listings` -- a page that
+                    # has real rows but whose rows all fail to yield a price
+                    # is a parse problem, not "end of results", and must not
+                    # be recorded as one.
                     print(f"   {term[:24]:<24} p{pgn:<3} empty - end of results")
                     done[key] = 0
                     break
+
+                listings = parse_rows(raw)
 
                 share = uk_share(listings)
                 rows = rows_for(listings, slug, f"{term}/p{pgn}", leaf_cat_id)
@@ -363,8 +369,12 @@ def main() -> int:
                     print(f"   {term[:24]:<24} shard at/near the {cap:,} cap -- "
                           "likely hiding more listings than this sweep can see")
 
-                # eBay serves the same page forever past the real end; zero
-                # new ids twice running means we are there.
+                # eBay serves the same page forever past the real end; a
+                # page with zero new ids means we are there. (Inherited from
+                # master's bulk_ebay.py, which this stream rewrote: the old
+                # comment there claimed "twice running" but the code has
+                # always broken on the first zero-new page -- fixing the
+                # comment to match, not changing the behaviour.)
                 if new == 0:
                     break
                 if not offline:

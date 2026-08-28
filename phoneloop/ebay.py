@@ -425,10 +425,20 @@ def parse_rows(rows, *, today: date | None = None) -> list[EbayListing]:
 # actually seen on a live UK results page, 2026-08-27, are mapped; an
 # unmapped name comes back None rather than a guessed code, because a wrong
 # code is worse downstream than an absent one.
+#
+# Measured across the stream's 528 recorded search rows (all seven captured
+# search pages): United States 49, China 27, Germany 15, Switzerland 12,
+# Italy 8, Canada 5, Spain 3, Australia 3, Denmark 3, Ireland 2, Lithuania 2,
+# Austria 1, India 1, Ukraine 1. "Hong Kong" is NOT one of them -- it was
+# wrongly mapped in an earlier pass (the only place "Hong Kong" appears in
+# any recording is an unrelated shipping-destination country-code dropdown
+# on the item pages, not a "ships from" line) and is dropped here rather
+# than kept as a guess.
 _ORIGIN_COUNTRY_CODES = {
     "germany": "DE", "united states": "US", "switzerland": "CH",
     "italy": "IT", "spain": "ES", "india": "IN", "lithuania": "LT",
-    "australia": "AU", "hong kong": "HK",
+    "australia": "AU", "china": "CN", "canada": "CA", "denmark": "DK",
+    "ireland": "IE", "austria": "AT", "ukraine": "UA",
 }
 
 

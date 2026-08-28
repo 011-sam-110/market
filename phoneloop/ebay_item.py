@@ -99,9 +99,11 @@ _TOP_SELLER_BLOCK_RE = re.compile(
 
 # "Registered as a business seller" / "Registered as a private seller" is the
 # ONE explicit marker this module trusts for seller_type (build contract
-# §2.5) -- both wordings were measured on real pages. Its absence is not
-# evidence of "private"; three of the six real pages show neither line at
-# all, and those stay "" rather than being guessed.
+# §2.5) -- both wordings were measured on real pages: all six real item
+# pages carry one of the two (4 business, 2 private), none show neither.
+# Its absence is still not treated as evidence of "private" -- a listing
+# with neither line stays "" rather than being guessed -- but that path is
+# untested here, since no captured page exercises it.
 _BUSINESS_MARKER = "Registered as a business seller"
 _PRIVATE_MARKER = "Registered as a private seller"
 

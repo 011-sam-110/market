@@ -108,6 +108,12 @@ LAST_ONE_ROW_URL = "https://www.ebay.co.uk/itm/128015361583?_skw=iphone+13+128gb
 ZERO_FEEDBACK_ROW = "Apple iPhone 13 128GB White Unlocked 5.4in iOS 12MP 5G Smartphone\nOpens in a new window or tab\nPre-owned · Apple iPhone 13 · Unlocked · 128 GB\n5.0 out of 5 stars.\n2 product ratings\n- Apple iPhone 13 128GB White Unlocked 5.4in iOS 12MP 5G Smartphone\n£200.38\nor Best Offer\n+£4.50 delivery\nreshi-1723 0% positive (0)\nderosnopS"
 ZERO_FEEDBACK_ROW_URL = "https://www.ebay.co.uk/itm/137649672983?_skw=iphone+13+128gb&epid=6052543130&itmmeta=01M12MQ4NNAG37PWQDNTDX68DA&hash=item200c8f5317:g:xnAAAeSwmX1qiao1"
 
+# China is the second most common ships_from on the 528 real rows (27, after
+# United States' 49) -- a real "from China" row, for the origin_country
+# mapping guard below.
+CHINA_ORIGIN_ROW = "IPhone 11 6.1'' GSM CDMA 64GB/128GB/256GB 12MP Mobile Phone Unlocked\nOpens in a new window or tab\nPre-owned\n5.0 out of 5 stars.\n4 product ratings\n- IPhone 11 6.1'' GSM CDMA 64GB/128GB/256GB 12MP Mobile Phone Unlocked\n£165.00 to £210.00(£165.00/Unit)\nBuy It Now\n+£9.99 delivery\nfrom China\ndollmascot 98.8% positive (1.7K)\nderosnopS"
+CHINA_ORIGIN_ROW_URL = "https://www.ebay.co.uk/itm/126637082291?_skw=iphone+13+128gb&epid=11034720500&itmmeta=01M12NBZRZPMW5XNF4RDZ1EV0F&hash=item1d7c2886b3:g:z0EAAOSwjQ5mxiHG"
+
 # The percentage-then-count ordering is the contract's documented shape (409
 # of 528 real rows, measured); this one carries the reverse ordering, seen on
 # 65 of the same 528.
@@ -577,6 +583,19 @@ class TestFreeDeliveryBannerIsNotAChargeLine:
         assert parse_row(FREE_POST).delivery_pence == 0
 
 
+# None of the 528 real rows this build captured, 2026-08-27, carried a
+# delivery-ETA line at all -- eBay did not show one anywhere on this sweep.
+# These four rows are hand-typed against the three ETA phrasings the design
+# spec and build contract document verbatim (contract §2.4), not lifted from
+# a page recording -- named SYNTHETIC_* per the standing rule; see
+# unverified[] in the build report.
+SYNTHETIC_ETA_IN_N_DAYS_ROW = "x\n£10.00\nFree delivery in 3 days"
+SYNTHETIC_ETA_HYPHEN_RANGE_ROW = "x\n£10.00\nEstimated delivery 3-5 days"
+SYNTHETIC_ETA_EN_DASH_RANGE_ROW = "x\n£10.00\nEstimated delivery 3–5 days"
+SYNTHETIC_ETA_GET_IT_BY_ROW = "x\n£10.00\nGet it by Tue 1 Sep"
+SYNTHETIC_ETA_GET_IT_BY_NEW_YEAR_ROW = "x\n£10.00\nGet it by Thu 1 Jan"
+
+
 class TestEta:
     """None of the 528 real rows this build captured, 2026-08-27, carried a
     delivery-ETA line at all -- eBay did not show one anywhere on this sweep.
@@ -584,27 +603,27 @@ class TestEta:
     design spec and build contract document verbatim (contract §2.4), not
     against a page recording; see unverified[] in the build report."""
 
-    def test_in_n_days(self):
-        assert parse_row("x\n£10.00\nFree delivery in 3 days").eta_days == 3
+    def test_synthetic_in_n_days(self):
+        assert parse_row(SYNTHETIC_ETA_IN_N_DAYS_ROW).eta_days == 3
 
-    def test_a_hyphen_range_takes_the_maximum(self):
-        assert parse_row("x\n£10.00\nEstimated delivery 3-5 days").eta_days == 5
+    def test_synthetic_a_hyphen_range_takes_the_maximum(self):
+        assert parse_row(SYNTHETIC_ETA_HYPHEN_RANGE_ROW).eta_days == 5
 
-    def test_an_en_dash_range_also_works(self):
-        assert parse_row("x\n£10.00\nEstimated delivery 3–5 days").eta_days == 5
+    def test_synthetic_an_en_dash_range_also_works(self):
+        assert parse_row(SYNTHETIC_ETA_EN_DASH_RANGE_ROW).eta_days == 5
 
-    def test_get_it_by_with_no_reference_date_is_none(self):
+    def test_synthetic_get_it_by_with_no_reference_date_is_none(self):
         """parse_row must not read the clock itself."""
-        assert parse_row("x\n£10.00\nGet it by Tue 1 Sep").eta_days is None
+        assert parse_row(SYNTHETIC_ETA_GET_IT_BY_ROW).eta_days is None
 
-    def test_get_it_by_with_a_reference_date(self):
-        row = parse_row("x\n£10.00\nGet it by Tue 1 Sep", today=date(2026, 8, 27))
+    def test_synthetic_get_it_by_with_a_reference_date(self):
+        row = parse_row(SYNTHETIC_ETA_GET_IT_BY_ROW, today=date(2026, 8, 27))
         assert row.eta_days == 5
 
-    def test_get_it_by_rolls_into_next_year(self):
+    def test_synthetic_get_it_by_rolls_into_next_year(self):
         """1 Jan relative to a late-December "today" is next year, not a
         negative day count."""
-        row = parse_row("x\n£10.00\nGet it by Thu 1 Jan", today=date(2026, 12, 28))
+        row = parse_row(SYNTHETIC_ETA_GET_IT_BY_NEW_YEAR_ROW, today=date(2026, 12, 28))
         assert row.eta_days == 4
 
     def test_no_eta_line_is_none(self):
@@ -612,8 +631,8 @@ class TestEta:
 
 
 class TestParseRowsPassesTodayThrough:
-    def test_today_reaches_every_row(self):
-        rows = [{"text": "x\n£10.00\nGet it by Tue 1 Sep"}]
+    def test_synthetic_today_reaches_every_row(self):
+        rows = [{"text": SYNTHETIC_ETA_GET_IT_BY_ROW}]
         listings = parse_rows(rows, today=date(2026, 8, 27))
         assert listings[0].eta_days == 5
 
@@ -696,6 +715,16 @@ class TestToRow:
         row = to_row(listing, category="phones", shard="s")
         assert row["region"] is None
         assert row["origin_country"] == "US"
+
+    def test_a_china_origin_listing_maps_to_cn(self):
+        """China is the second most common origin on the real recorded
+        pages (27 of 528 rows) -- the column exists precisely so a
+        China-sourced dropshipper can see China-shipped competitors (build
+        contract §1.1, col 32), so this name must never silently return
+        None."""
+        listing = parse_row(CHINA_ORIGIN_ROW, CHINA_ORIGIN_ROW_URL)
+        row = to_row(listing, category="phones", shard="s")
+        assert row["origin_country"] == "CN"
 
     def test_a_row_with_no_epid_has_no_identity_tier(self):
         listing = parse_row(UK_USED)
