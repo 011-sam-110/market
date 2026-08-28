@@ -299,18 +299,35 @@ def rows_to_deepen(store: MarketStore, *, limit: int) -> list[dict]:
         if leaf:
             by_leaf.setdefault(leaf, []).append(r)
 
-    # source_id -> size of the product group it belongs to; absent = ungrouped
-    group_size: dict[str, int] = {}
-    for leaf_rows in by_leaf.values():
+    grouped: list[list[dict]] = []      # one list per product group
+    seen: set[str] = set()
+    for leaf, leaf_rows in by_leaf.items():
         groups, _ = board.group_products_in_leaf(leaf_rows)
         for prod_rows in groups.values():
-            for r in prod_rows:
-                group_size[r["source_id"]] = len(prod_rows)
+            if len(prod_rows) < 2:
+                continue            # a group of one is not a product
+            grouped.append(prod_rows)
+            seen.update(r["source_id"] for r in prod_rows)
 
-    # Stable sort on group size descending: rows in the biggest product groups
-    # first, everything else in the order the store returned it.
-    ordered = sorted(candidates,
-                     key=lambda r: -group_size.get(r["source_id"], 0))
+    # Biggest groups first, but ROUND-ROBIN across them rather than draining
+    # each in turn. Sorting flat by group size empties the whole budget into
+    # the single largest group: measured live 2026-08-28, a 40-page budget
+    # went entirely into one 48-listing group of vintage phone spares, every
+    # row came back seller_type='private', and not one business knob moved.
+    # A product row needs only ONE business listing before min_margin,
+    # price_band and delivery can read, so one observation each of forty
+    # products is worth far more than forty of one.
+    grouped.sort(key=len, reverse=True)
+    ordered: list[dict] = []
+    for i in range(max((len(g) for g in grouped), default=0)):
+        for prod_rows in grouped:
+            if i < len(prod_rows):
+                ordered.append(prod_rows[i])
+
+    # Ungrouped rows keep their place behind the grouped ones -- never
+    # dropped, so a store where nothing groups still deepens a full batch
+    # instead of silently starving Tier 2.
+    ordered += [r for r in candidates if r["source_id"] not in seen]
     return ordered[:limit]
 
 

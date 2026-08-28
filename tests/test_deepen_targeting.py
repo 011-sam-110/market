@@ -37,6 +37,7 @@ SEEN = datetime(2026, 8, 28, 9, 0, tzinfo=UTC)
 # A real repeated-product shape, measured in hub 139956: one item, many
 # sellers, tight price band. This is what a board product row is made of.
 GROUPED_TITLE = "Bike Storage Shed for 1-4 Bikes Portable Waterproof Bike Tent 220x150x185cm"
+SECOND_TITLE = "Heavy Duty Waterproof Garden Patio Furniture Cover Rattan Table Set Protector"
 
 
 def _row(source_id: str, title: str, seller: str, *, deepened: bool = False) -> dict:
@@ -71,6 +72,16 @@ def mixed_store(tmp_path):
     return store
 
 
+@pytest.fixture
+def two_group_store(tmp_path):
+    """A big product group and a smaller one, in the same leaf."""
+    store = MarketStore(tmp_path)
+    rows = [_row(f"big{i}", GROUPED_TITLE, f"seller{i}") for i in range(10)]
+    rows += [_row(f"sml{i}", SECOND_TITLE, f"other{i}") for i in range(4)]
+    store.record(rows)
+    return store
+
+
 class TestGroupedRowsAreDeepenedFirst:
     def test_a_small_budget_is_spent_on_the_product_not_the_singletons(
             self, mixed_store):
@@ -84,6 +95,32 @@ class TestGroupedRowsAreDeepenedFirst:
             self, mixed_store):
         picked = bulk_ebay.rows_to_deepen(mixed_store, limit=26)
         assert len(picked) == 26, "prioritising must not drop the tail"
+
+
+class TestTheBudgetSpreadsAcrossGroups:
+    """Sorting purely by group size empties the budget into one product.
+
+    Measured live 2026-08-28: a 40-page budget sorted by size went entirely
+    into the single largest group (48 listings of "Vintage 1990s Old Retro
+    mobile Phone Untested Spares Or Repair"). All 40 came back
+    seller_type='private', so NO business knob moved -- 40 page loads, zero
+    board coverage gained. Deep coverage of one product is worth less than
+    one observation each of forty, because a product row needs only a single
+    business listing before min_margin / price_band / delivery can read.
+    """
+
+    def test_a_budget_smaller_than_a_group_still_reaches_other_groups(
+            self, two_group_store):
+        picked = bulk_ebay.rows_to_deepen(two_group_store, limit=4)
+        titles = {r["title"] for r in picked}
+        assert len(titles) == 2, (
+            "the whole budget went into one product group; a second group "
+            "went untouched")
+
+    def test_every_group_is_touched_before_any_is_finished(
+            self, two_group_store):
+        picked = bulk_ebay.rows_to_deepen(two_group_store, limit=2)
+        assert len({r["title"] for r in picked}) == 2
 
 
 class TestTheOldGuaranteesHold:
