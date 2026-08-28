@@ -1,81 +1,116 @@
-"""Enumerate eBay UK at scale, with location pinned server-side.
+"""Enumerate eBay UK at scale -- direct-first, harness-honouring, cap-aware.
 
-The earlier eBay work had a hole underneath it. Captures went through a
-rotating residential gateway with no country targeting, so consecutive requests
-left from Poland, then New York, then Albany. eBay reorders results by shipping
-proximity to the requester, so a "UK search" answered from Poland is a
-different, thinner, wronger population -- and nothing downstream could see it.
-The UK share of a single run's queries swung from 79/88 to 28/84.
+Location used to be pinned server-side with `LH_LocatedIn=1` ("UK only").
+That is now dropped. It excludes exactly the competitors a China-sourced
+dropshipper prices against, and the niche finder needs the whole competitor
+set, not a UK-only slice of it -- `origin_country` on every row (from
+`phoneloop.ebay.to_row`) records where a listing ships from instead, so the
+information is kept without narrowing the population that produced it. What
+that parameter's removal reopens is the egress-geography trap it used to
+paper over: a request answered from Hong Kong sees a different, thinner, UK
+pool than one answered from London, and eBay reorders by shipping proximity
+to the requester. `uk_share()` still runs on every page as a result printed
+alongside the sweep, not a gate that skips one -- the point of a competitor
+count is to see the whole market, overseas rows included, not to throw the
+page away because too much of it is overseas.
 
-The fix is not to stop using the proxy. It is to stop letting the *requester's*
-address decide the population: `LH_LocatedIn=1` asks eBay for UK-located items
-explicitly, server-side, so egress geography no longer selects the pool.
+Egress: direct first, the residential proxy only after eBay blocks the
+initial homepage load (measured, 2026-08-27: a headed session gets one page
+directly before a captcha or an error page; the proxy is reliable). Decided
+once at the start of the run -- the same pattern scripts/record_ebay.py
+uses -- and escalated again, once, if a page mid-run comes back blocked while
+still on direct.
 
-That parameter was found by reading eBay's own filter links, after guessing
-wrong. Worth recording so nobody re-guesses: `LH_PrefLoc=1` is NOT a UK
-filter -- measured, it returns 55-63% UK, which is indistinguishable from no
-filter at all -- and `LH_PrefLoc=3` is North America (240 of 261 rows
-explicitly United States). `LH_LocatedIn=1` returns 97%.
+Two sweep modes, same storage path:
 
-The guard from `phoneloop.ebay` still runs on every page as a check on that claim
--- if the filter ever stops meaning what it means, the run says so instead of
-quietly banking a foreign sample.
+    --category phones           existing keyword sweep (_nkw=), unchanged shape
+    --leaf-sweep                new _sacat= sweep over catalog_ebay.IN_SCOPE
+
+`--leaf-sweep` imports `phoneloop.catalog_ebay` lazily, inside the code path
+that needs it, because that module belongs to a sibling stream
+(build/s6_category_scope) not merged into this worktree -- see the build
+report's unverified[]. The keyword sweep has no such dependency and is
+fully exercisable today.
+
+Cap: `catalog.result_cap("ebay")` (10,000, measured -- page 45 at 240/page
+returned zero on a 21,000+-result query). The saturation test is "the page
+came back with zero rows", never eBay's own rounded result-count header
+(spec §11); `catalog.is_saturated(unique_seen, "ebay")` only ever fires as a
+warning that a shard likely hides more listings than the cap let through --
+this script does not price-band-split an eBay shard the way bulk_vinted.py
+splits a Vinted one; a shard that saturates is reported, not sub-sharded.
+
+A blocked fetch (captcha, error page, proxy 403) is never recorded as an
+empty shard: `done[key] = 0` means "swept, genuinely nothing there", and a
+blocked shard never gets that value. It is left OUT of `done` entirely (so
+the next run retries it) and logged under `checkpoint["blocked"]` with a
+reason, so a market that is actually empty and a market this run could not
+reach do not look the same on resume.
+
+Replay honours the harness like scripts/refresh_ebay.py: in
+PHONELOOP_HARNESS=replay (the default), no browser is ever launched and
+every page comes from `harness.recorded(cassette, "ebay", name, produce)` --
+a shard with no matching recording raises `MissingRecording` rather than
+returning an empty page, and that is left to propagate rather than caught
+as "blocked": a gap in the fixtures is a different problem from eBay
+blocking a live request, and conflating them would hide the gap.
 
     python scripts/bulk_ebay.py --category phones
-    python scripts/bulk_ebay.py --max-pages 400
-    python scripts/bulk_ebay.py --direct          # no proxy; rate-limits fast
+    python scripts/bulk_ebay.py --leaf-sweep --max-pages 400
+    python scripts/bulk_ebay.py --category phones --direct   # no proxy fallback
+    PHONELOOP_HARNESS=replay python scripts/bulk_ebay.py --leaf-sweep --max-pages 3 --fresh
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
-import random
 import sys
 import time
-from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote_plus, urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from phoneloop import catalog, config, proxies  # noqa: E402
-from phoneloop.ebay import parse_rows, uk_share  # noqa: E402
+from phoneloop import catalog, config, harness, proxies  # noqa: E402
+from phoneloop.ebay import parse_rows, to_row, uk_share  # noqa: E402
+from phoneloop.harness import Cassette, recorded  # noqa: E402
 from phoneloop.market_store import MarketStore  # noqa: E402
-from phoneloop.parser import parse  # noqa: E402
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-# _ipg=240 is the largest page eBay serves. LH_LocatedIn=1 is "UK only".
-# _udlo/_udhi are the price band. _pgn is the page.
-SEARCH = ("https://www.ebay.co.uk/sch/i.html?_nkw={q}&_ipg=240&_pgn={page}"
-          "&LH_LocatedIn=1&_udlo={lo}&_udhi={hi}")
+# _ipg=240 is the largest page eBay serves. _pgn is the page. _udlo/_udhi are
+# the price band, in pounds -- LH_LocatedIn is gone (see module docstring).
+SEARCH_NKW = ("https://www.ebay.co.uk/sch/i.html?_nkw={term}&_ipg=240&_pgn={page}"
+              "&_udlo={lo}&_udhi={hi}")
+SEARCH_SACAT = ("https://www.ebay.co.uk/sch/i.html?_sacat={term}&_ipg=240&_pgn={page}"
+                "&_udlo={lo}&_udhi={hi}")
+
+# The spec's default retail band (§3, knob 3) -- used only for --leaf-sweep,
+# which carries no per-category band the way phoneloop.catalog.Category does.
+DEFAULT_PRICE_FROM = 15
+DEFAULT_PRICE_TO = 55
 
 PAUSE_S = 4.0
 NAV_TIMEOUT_MS = 75000
-MAX_PAGE = 40                # eBay stops serving new results well before this
-MIN_UK_SHARE_OK = 0.80       # with LH_LocatedIn=1 this should be near 1.0
+# catalog.result_cap("ebay") // 240, rounded up, plus one -- the page budget
+# a single shard could ever need before it is either saturated or exhausted.
+MAX_PAGE = 42
 
 _ROW_JS = """() => {
   const out = [];
   document.querySelectorAll('li').forEach(li => {
     const t = li.innerText || '';
     if (!/£/.test(t)) return;
-    if (t.length < 45 || t.length > 700) return;
+    if (t.length < 20 || t.length > 900) return;
     const a = li.querySelector('a[href*="/itm/"]');
     if (!a) return;
-    out.push({ text: t, href: a.href.split('?')[0] });
+    out.push({ text: t, href: a.href });
   });
   return out;
 }"""
-
-
-def item_id_from(url: str) -> str | None:
-    """eBay's item number out of an /itm/ URL."""
-    part = url.rstrip("/").split("/itm/")[-1]
-    tail = part.split("/")[-1].split("?")[0]
-    return tail if tail.isdigit() else None
 
 
 def playwright_proxy():
@@ -87,71 +122,111 @@ def playwright_proxy():
             "username": p.username, "password": p.password}
 
 
-def rows_for(listings, hrefs, category: str, shard: str) -> list[dict]:
-    out = []
-    for listing in listings:
-        item_id = item_id_from(listing.url)
-        if item_id is None:
-            continue
-        spec = parse(listing.title)
-        out.append({
-            "source": "ebay",
-            "source_id": item_id,
-            "category": category,
-            "shard": shard,
-            "title": listing.title,
-            "price_pence": listing.price_pence,
-            # NULL, not zero, when eBay did not state delivery. A £150 phone
-            # with unstated postage is not a £150 phone.
-            "total_pence": listing.landed_pence,
-            "currency": "GBP",
-            "condition": listing.condition,
-            "brand": "",
-            "model": listing.catalogue_model or spec.model,
-            "storage_gb": listing.storage_gb or spec.storage_gb,
-            "grade": "",
-            "kind": "ask",
-            "available": True,
-            "region": "GB" if listing.is_uk else "",
-            "seller_id": "",
-            "url": listing.url,
-            "extra": {
-                "watchers": listing.watchers,
-                "ships_from": listing.ships_from,
-                "aspects": list(listing.aspects),
-                "is_used": listing.is_used,
-                "delivery_pence": listing.delivery_pence,
-            },
-        })
-    return out
+def is_blocked(body: str, url: str) -> bool:
+    return ("Something went wrong" in body or "Security measure" in body
+            or "splashui/captcha" in url)
 
 
-def fetch_page(page, query: str, lo: int, hi: int, pgn: int) -> list[dict]:
-    url = SEARCH.format(q=quote_plus(query), page=pgn, lo=lo, hi=hi)
+def warm_up(page) -> str:
+    page.goto("https://www.ebay.co.uk/", timeout=NAV_TIMEOUT_MS, wait_until="load")
+    page.wait_for_timeout(2000)
+    return page.inner_text("body")
+
+
+def open_session(pw, *, headless: bool, force_direct: bool):
+    """Direct first; the residential proxy only if the homepage load itself
+    comes back blocked. Returns (browser, page, used_proxy).
+
+    `force_direct` (the --direct flag) skips the fallback entirely -- for
+    deliberately testing direct-only behaviour, not for production sweeps.
+    """
+    browser = pw.chromium.launch(headless=headless, channel="chrome", proxy=None)
+    page = browser.new_page(locale="en-GB")
+    body = warm_up(page)
+    if not is_blocked(body, page.url):
+        return browser, page, False
+    if force_direct:
+        raise RuntimeError("direct egress blocked on the homepage load and "
+                           "--direct forbids the proxy fallback")
+
+    print("direct egress blocked on the homepage load -> falling back to "
+          "the residential proxy")
+    browser.close()
+    proxy = playwright_proxy()
+    if proxy is None:
+        raise RuntimeError(
+            "direct egress blocked and no PHONELOOP_PROXY_URL is configured")
+    browser = pw.chromium.launch(headless=headless, channel="chrome", proxy=proxy)
+    page = browser.new_page(locale="en-GB")
+    body = warm_up(page)
+    if is_blocked(body, page.url):
+        browser.close()
+        raise RuntimeError(
+            "blocked on both direct and the residential proxy -- eBay "
+            "refused the homepage load either way")
+    return browser, page, True
+
+
+def fetch_page(page, url: str) -> list[dict]:
+    """One live page load. Raises on a captcha or an error page -- the
+    caller is what decides whether that is a shard-ending block or a cue to
+    escalate to the proxy; this function only reports what it saw."""
     page.goto(url, timeout=NAV_TIMEOUT_MS, wait_until="load")
     page.wait_for_timeout(2500)
     body = page.inner_text("body")
-    # A captcha and an empty market look identical downstream unless they are
-    # separated here.
-    if "Security measure" in body or "splashui/captcha" in page.url:
-        raise RuntimeError("captcha")
-    if "Something went wrong" in body or page.title().startswith("Error Page"):
-        raise RuntimeError("error page - rate limited")
+    if is_blocked(body, page.url):
+        raise RuntimeError("blocked (captcha or error page)")
     return page.evaluate(_ROW_JS)
 
 
+def rows_for(listings, category: str, shard: str,
+            leaf_category_id: str | None) -> list[dict]:
+    return [to_row(listing, category=category, shard=shard,
+                   leaf_category_id=leaf_category_id)
+           for listing in listings]
+
+
+def leaf_targets() -> list[tuple[str, str, str]]:
+    """(slug, title, leaf_category_id) for every in-scope leaf.
+
+    Deferred import: phoneloop.catalog_ebay belongs to build/s6_category_scope,
+    a sibling stream not merged into this worktree. This function is only
+    ever called from the --leaf-sweep code path, so the rest of this script
+    -- including the whole keyword sweep -- works today regardless of
+    whether that module exists yet.
+    """
+    from phoneloop import catalog_ebay
+    tree = catalog_ebay.load_tree()
+    out = []
+    for dept in catalog_ebay.IN_SCOPE:
+        for leaf in catalog_ebay.leaves_for(dept.slug, tree=tree):
+            out.append((dept.slug, leaf.title, leaf.category_id))
+    return out
+
+
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--category", action="append")
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--category", action="append",
+                    help="keyword sweep: a phoneloop.catalog slug")
+    ap.add_argument("--leaf-sweep", action="store_true",
+                    help="_sacat= sweep over catalog_ebay.IN_SCOPE leaves")
+    ap.add_argument("--price-from", type=int, default=DEFAULT_PRICE_FROM,
+                    help="pounds, --leaf-sweep only")
+    ap.add_argument("--price-to", type=int, default=DEFAULT_PRICE_TO,
+                    help="pounds, --leaf-sweep only")
     ap.add_argument("--max-pages", type=int, default=0,
                     help="stop after this many page loads (0 = unbounded)")
     ap.add_argument("--target", type=int, default=0)
     ap.add_argument("--direct", action="store_true",
-                    help="no proxy; expect rate limiting within ~10 requests")
+                    help="direct only; refuse the proxy fallback on a block")
     ap.add_argument("--headless", action="store_true")
     ap.add_argument("--checkpoint", type=Path, default=None)
     ap.add_argument("--fresh", action="store_true")
     args = ap.parse_args()
+
+    if not args.category and not args.leaf_sweep:
+        args.category = [c.slug for c in catalog.CATEGORIES]
 
     cfg = config.load()
     store = MarketStore(cfg.DATA_DIR, max_bytes=cfg.MAX_STORE_BYTES)
@@ -160,91 +235,145 @@ def main() -> int:
     checkpoint: dict = {}
     if cp_path.exists() and not args.fresh:
         checkpoint = json.loads(cp_path.read_text(encoding="utf-8"))
-        print(f"resuming: {len(checkpoint.get('done', {}))} shards done")
+        print(f"resuming: {len(checkpoint.get('done', {}))} shards done, "
+              f"{len(checkpoint.get('blocked', {}))} previously blocked")
     done = checkpoint.setdefault("done", {})
+    blocked_log = checkpoint.setdefault("blocked", {})
 
-    slugs = args.category or [c.slug for c in catalog.CATEGORIES]
-    proxy = None if args.direct else playwright_proxy()
-    print(f"egress: {'DIRECT' if proxy is None else 'proxy (UK pinned server-side)'}")
+    # (mode, term, category_slug, leaf_category_id, price_lo, price_hi)
+    targets: list[tuple[str, str, str, str | None, int, int]] = []
+    if args.leaf_sweep:
+        for slug, title, cat_id in leaf_targets():
+            if not cat_id:
+                print(f"   skipping {title!r} - no category_id read yet "
+                      "(scripts/refresh_ebay_categories.py has not filled it in)")
+                continue
+            targets.append(("sacat", cat_id, slug, cat_id,
+                            args.price_from, args.price_to))
+    for slug in args.category or []:
+        cat = catalog.BY_SLUG.get(slug)
+        if cat is None:
+            print(f"unknown category {slug!r}")
+            continue
+        for query in cat.ebay_queries:
+            targets.append(("nkw", query, slug, None, cat.price_from, cat.price_to))
 
-    from playwright.sync_api import sync_playwright
+    cassette = Cassette()   # PHONELOOP_FIXTURES when set, else the repo's fixtures/
+    offline = harness.mode() == harness.REPLAY
+    print(f"harness: {harness.mode()}"
+          + (f", {len(cassette.keys('ebay'))} ebay recordings under {cassette.root}"
+             if offline else ""))
+    print(f"{len(targets)} shard{'s' if len(targets) != 1 else ''} to sweep "
+          f"({'leaf' if args.leaf_sweep else 'keyword'} mode)")
 
+    cap = catalog.result_cap("ebay")
     pages_loaded = 0
     total_unique: set[str] = set()
     started = time.time()
 
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=args.headless, channel="chrome",
-                                     proxy=proxy)
-        page = browser.new_page(locale="en-GB")
-        try:
-            for slug in slugs:
-                cat = catalog.BY_SLUG.get(slug)
-                if cat is None:
-                    print(f"unknown category {slug!r}")
+    with contextlib.ExitStack() as stack:
+        page = None
+        used_proxy = False
+        if not offline:
+            from playwright.sync_api import sync_playwright
+            pw = stack.enter_context(sync_playwright())
+            browser, page, used_proxy = open_session(
+                pw, headless=args.headless, force_direct=args.direct)
+            # A lambda, not `browser.close` bound now: escalation below
+            # reassigns `browser` to a fresh proxied one mid-run, and this
+            # must close whichever browser is current when the stack unwinds,
+            # not the direct one captured at entry.
+            stack.callback(lambda: browser.close())
+            print(f"egress: {'proxy' if used_proxy else 'DIRECT'}")
+
+        for mode, term, slug, leaf_cat_id, lo, hi in targets:
+            cat_unique: set[str] = set()
+            for pgn in range(1, MAX_PAGE + 1):
+                key = f"{mode}:{term}:{lo}-{hi}:p{pgn}"
+                if key in done:
                     continue
-                print(f"\n=== {slug} — {len(cat.ebay_queries)} queries ===")
-                cat_unique: set[str] = set()
+                if len(cat_unique) >= cap:
+                    print(f"   {term[:24]:<24} p{pgn:<3} cap reached "
+                          f"({cap:,}) - stopping this shard")
+                    break
+                if args.max_pages and pages_loaded >= args.max_pages:
+                    print("   page budget spent")
+                    return _finish(store, cp_path, checkpoint, total_unique, started)
 
-                for query in cat.ebay_queries:
-                    for pgn in range(1, MAX_PAGE + 1):
-                        key = f"{slug}/{query}/{cat.price_from}-{cat.price_to}/{pgn}"
-                        if key in done:
-                            continue
-                        if args.max_pages and pages_loaded >= args.max_pages:
-                            print("   page budget spent")
-                            raise SystemExit(_finish(
-                                store, cp_path, checkpoint, total_unique, started))
-                        try:
-                            raw = fetch_page(page, query, cat.price_from,
-                                             cat.price_to, pgn)
-                            pages_loaded += 1
-                        except Exception as exc:            # noqa: BLE001
-                            print(f"   {query[:24]:<24} p{pgn:<3} FAILED "
-                                  f"{str(exc)[:44]}")
-                            time.sleep(PAUSE_S * 4)
-                            break
+                template = SEARCH_SACAT if mode == "sacat" else SEARCH_NKW
+                url = template.format(term=quote_plus(term) if mode == "nkw" else term,
+                                      page=pgn, lo=lo, hi=hi)
 
-                        listings = parse_rows(raw)
-                        if not listings:
-                            print(f"   {query[:24]:<24} p{pgn:<3} empty - end of results")
-                            done[key] = 0
-                            break
+                try:
+                    raw = recorded(cassette, "ebay", key,
+                                   lambda: fetch_page(page, url))
+                    pages_loaded += 1
+                except harness.MissingRecording:
+                    # A gap in the fixtures, not eBay blocking a live
+                    # request -- must propagate, not be swallowed as
+                    # "blocked" (spec §10, build contract §6.3).
+                    raise
+                except Exception as exc:                     # noqa: BLE001
+                    reason = str(exc)[:80]
+                    print(f"   {term[:24]:<24} p{pgn:<3} BLOCKED {reason}")
+                    blocked_log[key] = reason
+                    if not offline and not used_proxy and not args.direct:
+                        proxy = playwright_proxy()
+                        if proxy is not None:
+                            print("   still on direct egress -> escalating "
+                                  "the rest of this run to the residential "
+                                  "proxy")
+                            # Swap in a fresh proxied browser/page; the
+                            # ExitStack callback above closes whichever one
+                            # is current when the run ends, not this one.
+                            browser.close()
+                            browser = pw.chromium.launch(
+                                headless=args.headless, channel="chrome",
+                                proxy=proxy)
+                            page = browser.new_page(locale="en-GB")
+                            used_proxy = True
+                        else:
+                            print("   blocked and no PHONELOOP_PROXY_URL "
+                                  "configured -- staying on direct egress")
+                    time.sleep(PAUSE_S * 4)
+                    break
 
-                        share = uk_share(listings)
-                        if share < MIN_UK_SHARE_OK:
-                            # LH_LocatedIn=1 is supposed to make this impossible.
-                            # If it stops being true, say so rather than bank
-                            # the sample.
-                            print(f"   {query[:24]:<24} p{pgn:<3} SKIPPED - "
-                                  f"only {share:.0%} UK despite LH_LocatedIn=1")
-                            done[key] = 0
-                            continue
+                listings = parse_rows(raw)
+                if not listings:
+                    # The saturation test (build contract §2.4/§4): the page
+                    # came back with zero rows. This is what "done" as an
+                    # empty shard actually means -- never a block.
+                    print(f"   {term[:24]:<24} p{pgn:<3} empty - end of results")
+                    done[key] = 0
+                    break
 
-                        rows = rows_for(listings, raw, slug, f"{query}/p{pgn}")
-                        written = store.record(rows)
-                        ids = {r["source_id"] for r in rows}
-                        new = len(ids - cat_unique)
-                        cat_unique |= ids
-                        total_unique |= ids
-                        done[key] = len(ids)
-                        print(f"   {query[:24]:<24} p{pgn:<3} {len(rows):>3} rows "
-                              f"{new:>3} new  {share:.0%} UK  (+{written} stored)")
+                share = uk_share(listings)
+                rows = rows_for(listings, slug, f"{term}/p{pgn}", leaf_cat_id)
+                written = store.record(rows)
+                ids = {r["source_id"] for r in rows}
+                new = len(ids - cat_unique)
+                cat_unique |= ids
+                total_unique |= ids
+                done[key] = len(ids)
+                print(f"   {term[:24]:<24} p{pgn:<3} {len(rows):>3} rows "
+                      f"{new:>3} new  {share:.0%} UK (observation only)  "
+                      f"(+{written} stored)")
 
-                        # eBay serves the same page forever past the real end;
-                        # zero new ids twice running means we are there.
-                        if new == 0:
-                            break
-                        time.sleep(PAUSE_S + random.random() * 2)
+                if catalog.is_saturated(len(cat_unique), "ebay"):
+                    print(f"   {term[:24]:<24} shard at/near the {cap:,} cap -- "
+                          "likely hiding more listings than this sweep can see")
 
-                    cp_path.parent.mkdir(parents=True, exist_ok=True)
-                    cp_path.write_text(json.dumps(checkpoint), encoding="utf-8")
-                    if args.target and len(cat_unique) >= args.target:
-                        print(f"   target {args.target} reached for {slug}")
-                        break
-                print(f"--- {slug}: {len(cat_unique):,} unique")
-        finally:
-            browser.close()
+                # eBay serves the same page forever past the real end; zero
+                # new ids twice running means we are there.
+                if new == 0:
+                    break
+                if not offline:
+                    time.sleep(PAUSE_S)
+
+            cp_path.parent.mkdir(parents=True, exist_ok=True)
+            cp_path.write_text(json.dumps(checkpoint), encoding="utf-8")
+            if args.target and len(cat_unique) >= args.target:
+                print(f"   target {args.target} reached for {term!r}")
 
     return _finish(store, cp_path, checkpoint, total_unique, started)
 
@@ -255,6 +384,9 @@ def _finish(store, cp_path, checkpoint, total_unique, started) -> int:
     print(f"\nswept {len(total_unique):,} unique eBay listings in "
           f"{(time.time() - started) / 60:.1f} min")
     print(f"store now holds {store.total_listings('ebay'):,} distinct ebay listings")
+    if checkpoint.get("blocked"):
+        print(f"{len(checkpoint['blocked'])} shard(s) blocked, not swept -- "
+              "left out of 'done' so the next run retries them")
     return 0
 
 
