@@ -197,6 +197,83 @@ def _leaf_category_id(html: str) -> str:
     return m.group(1) if m else ""
 
 
+# --- delivery estimate ----------------------------------------------------
+
+# The search row almost never shows one; the item page nearly always does.
+# Measured 2026-08-28: eta_days present on 798 of 31,206 stored search rows
+# (2.6%), against an estimate on 195 of the 196 recorded item pages (99.5%).
+# Until this parsed it, no amount of deepening could move knob 4.
+#
+# Two wordings, both real, counted over those 196 pages:
+#     "Estimated between Tue, 1 Sep and Thu, 3 Sep to BN11AA"   180 (91.8%)
+#     "Estimated by Sat, 29 Aug to BN11AA. See details"          15  (7.7%)
+# The weekday prefix is optional in both patterns rather than required,
+# because nothing guarantees eBay keeps it.
+#
+# The estimate is to the VIEWER's postcode -- BN11AA is this machine, in
+# Brighton. It is a UK-buyer ETA, not a property of the listing, and a run
+# from another location would record different numbers.
+_EST_BETWEEN_RE = re.compile(
+    r"Estimated between\s+(?:[A-Za-z]{3,9},?\s*)?(\d{1,2})\s+([A-Za-z]{3,9})"
+    r"\s+and\s+(?:[A-Za-z]{3,9},?\s*)?(\d{1,2})\s+([A-Za-z]{3,9})", re.I)
+_EST_BY_RE = re.compile(
+    r"Estimated by\s+(?:[A-Za-z]{3,9},?\s*)?(\d{1,2})\s+([A-Za-z]{3,9})", re.I)
+
+
+def _to_date(day: str, month_name: str, today: date) -> date | None:
+    """A "3 Sep" with no year, resolved against `today`.
+
+    A target already past is next year's. Every recording lands in September,
+    so the rollover has no live example -- it is guarded because a December
+    run would otherwise report a January delivery as a large NEGATIVE number
+    of days, which would sail through a "at most 7 days" threshold.
+    """
+    month = _MONTHS.get(month_name[:3].lower())
+    if month is None:
+        return None
+    try:
+        target = date(today.year, month, int(day))
+    except ValueError:
+        return None
+    if target < today:
+        try:
+            target = date(today.year + 1, month, int(day))
+        except ValueError:
+            return None
+    return target
+
+
+def _delivery_estimate(text: str) -> str:
+    """The estimate phrase as written, or "" when the page carries none."""
+    m = _EST_BETWEEN_RE.search(text) or _EST_BY_RE.search(text)
+    return " ".join(m.group(0).split()) if m else ""
+
+
+def _eta_days(text: str, today: date | None) -> int | None:
+    """Maximum promised delivery days, or None if the page does not say.
+
+    Pure -- `today` is a parameter, never the clock, so a recording gives the
+    same answer next month (the rule ebay._eta_days already follows).
+
+    A range resolves to its LATE end. Knob 4 is a MAXIMUM ("max delivery
+    days"), so reading the early end would let a "1 to 14 days" listing clear
+    a 7-day threshold on its best case.
+    """
+    if today is None:
+        return None
+    m = _EST_BETWEEN_RE.search(text)
+    if m:
+        first = _to_date(m.group(1), m.group(2), today)
+        last = _to_date(m.group(3), m.group(4), today)
+        candidates = [d for d in (first, last) if d is not None]
+        return (max(candidates) - today).days if candidates else None
+    m = _EST_BY_RE.search(text)
+    if m:
+        target = _to_date(m.group(1), m.group(2), today)
+        return (target - today).days if target else None
+    return None
+
+
 @dataclass(frozen=True)
 class EbayItem:
     item_id: str
@@ -215,6 +292,21 @@ class EbayItem:
     gtin: str = ""
     epid: str = ""
     leaf_category_id: str = ""
+    # The raw "Estimated between/by ..." phrase, kept verbatim rather than
+    # resolved to a day count at parse time. The page states DATES with no
+    # year, so turning them into days needs a reference date, and baking in
+    # "the day this was parsed" would make a replayed recording answer
+    # differently every day. Empty when the page carries no estimate.
+    delivery_estimate: str = ""
+
+    def eta_days_on(self, today: date | None) -> int | None:
+        """Maximum promised delivery days as of `today`, or None.
+
+        None for a page with no estimate AND for `today=None` -- an unknown
+        is never reported as a number, since knob 4 treats a small eta_days
+        as a pass.
+        """
+        return _eta_days(self.delivery_estimate, today)
 
 
 def parse_item(text: str, *, html: str = "", url: str = "") -> EbayItem | None:
@@ -267,10 +359,12 @@ def parse_item(text: str, *, html: str = "", url: str = "") -> EbayItem | None:
         gtin=gtin,
         epid=epid,
         leaf_category_id=_leaf_category_id(html),
+        delivery_estimate=_delivery_estimate(text),
     )
 
 
-def to_row_updates(item: EbayItem, *, sweep_extra: str | dict | None = None) -> dict:
+def to_row_updates(item: EbayItem, *, sweep_extra: str | dict | None = None,
+                   today: date | None = None) -> dict:
     """The subset of ROW_FIELDS an item page can fill, for merging onto a
     sweep row (build contract §2.5) -- only keys this parser has an actual
     opinion on, so merging never clobbers a search row's own good data with
@@ -290,6 +384,13 @@ def to_row_updates(item: EbayItem, *, sweep_extra: str | dict | None = None) -> 
     does the merge itself, so `row.update(...)` is safe again.
     """
     updates: dict = {}
+    # Only written when the page actually stated an estimate AND a reference
+    # date was supplied. A search row that did carry its own "delivery in 3
+    # days" must survive a deepen of a page that says nothing about delivery,
+    # so absence stays absent rather than becoming an explicit None.
+    eta = item.eta_days_on(today)
+    if eta is not None:
+        updates["eta_days"] = eta
     if item.sold_qty is not None:
         updates["sold_qty"] = item.sold_qty
     if item.qty_available is not None:

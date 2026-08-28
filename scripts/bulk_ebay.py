@@ -256,6 +256,25 @@ def fetch_item(page, url: str) -> dict:
     return {"text": body, "html": page.content(), "url": page.url}
 
 
+def observed_on(row: dict) -> date | None:
+    """The date a stored row was observed, for resolving a yearless date.
+
+    Prefers the store's own `date` partition, falls back to `seen_at`, and
+    returns None rather than today's date when neither is present -- a
+    missing reference must make the eta unknown, not silently measured from
+    the wrong day.
+    """
+    d = row.get("date")
+    if isinstance(d, date) and not isinstance(d, datetime):
+        return d
+    seen = row.get("seen_at")
+    if isinstance(seen, datetime):
+        return seen.date()
+    if isinstance(d, datetime):
+        return d.date()
+    return None
+
+
 def rows_to_deepen(store: MarketStore, *, limit: int) -> list[dict]:
     """The most recent snapshot's eBay rows that carry a real item `url` and
     have never been deepened (`seller_type` still unset) -- capped at
@@ -408,7 +427,16 @@ def run_deepen(store: MarketStore, cassette: Cassette, *, offline: bool,
             if item is None:
                 print(f"   {url} -> no parseable item id, skipped")
                 continue
-            updates = ebay_item.to_row_updates(item, sweep_extra=row.get("extra"))
+            # The item page states delivery DATES with no year, so turning
+            # them into a day count needs a reference date. That reference is
+            # the row's own observation date, not the clock: an eta belongs
+            # to the observation that carries it, and using "now" would make
+            # a replayed recording answer differently every day it is
+            # replayed -- the exact drift the harness exists to remove. In
+            # the daily pipeline (sweep -> deepen -> board, same invocation)
+            # the two are the same day anyway.
+            updates = ebay_item.to_row_updates(
+                item, sweep_extra=row.get("extra"), today=observed_on(row))
             if not updates:
                 print(f"   {url} -> item page carried nothing new")
                 continue
