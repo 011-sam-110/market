@@ -39,7 +39,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from phoneloop import board, catalog_ebay, config  # noqa: E402
+from phoneloop import board, catalog_ebay, config, heartbeat  # noqa: E402
 from phoneloop.knobs import Knobs  # noqa: E402
 from phoneloop.market_store import MarketStore  # noqa: E402
 from phoneloop.snapshots import difference  # noqa: E402
@@ -68,6 +68,16 @@ def main() -> int:
     cfg = config.load()
     knobs = Knobs.from_env()
     store = MarketStore(cfg.DATA_DIR, max_bytes=cfg.MAX_STORE_BYTES)
+
+    # FIRST, above everything -- including the "no snapshots at all" exit
+    # below. A board that opens with rankings and buries "last night failed"
+    # underneath them is a board that gets read as though the numbers were
+    # fresh. `health_for` never raises.
+    health = heartbeat.health_for(cfg.DATA_DIR)
+    banner = board.render_health_text(health)
+    if banner:
+        print(banner)
+        print()
 
     dates = store.snapshot_dates("ebay")
     if not dates:
@@ -113,7 +123,7 @@ def main() -> int:
         all_rows += product_rows
 
     if args.html:
-        path = board.write_report(all_rows, cfg.DATA_DIR)
+        path = board.write_report(all_rows, cfg.DATA_DIR, health=health)
         print()
         print(f"wrote {path}")
 

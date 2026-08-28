@@ -49,8 +49,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from phoneloop import catalog_ebay, ebay, fees, identity
+from phoneloop import catalog_ebay, ebay, fees, heartbeat, identity
 from phoneloop import metrics as metrics_mod
+from phoneloop.heartbeat import Health
 from phoneloop.knobs import Knobs
 from phoneloop.market_store import MarketStore
 from phoneloop.metrics import KnobResult, Metrics
@@ -339,15 +340,68 @@ tr:nth-child(even){background:#11151c}
 .fail{color:#e05555}
 .unknown{color:#9aa4b2}
 .lifetime-note{color:#e0a955}
+.knob-note{color:#8b93a1;font-size:0.9em}
+.health{border-radius:6px;padding:0.7rem 1rem;margin:0 0 1rem 0;
+        border:1px solid #2a2f3a;line-height:1.45}
+.health .headline{font-weight:600;display:block;margin-bottom:0.25rem}
+.health .detail{color:#c4cbd6;font-size:0.88rem}
+.health-ok{background:#10251a;border-color:#2f6b45}
+.health-ok .headline{color:#63d18a}
+.health-warn{background:#2a2211;border-color:#7a6120}
+.health-warn .headline{color:#e0a955}
+.health-alarm{background:#2c1315;border-color:#7d2c30}
+.health-alarm .headline{color:#ff6b6b}
+.health-unknown{background:#171b22;border-color:#39404d}
+.health-unknown .headline{color:#9aa4b2}
 """
 
 
+def render_health_text(health: "Health | None") -> str:
+    """The nightly health as terminal text, printed ABOVE the board.
+
+    Empty string when there is nothing to say, so a caller can print it
+    unconditionally. An OK stays to one line: a banner that shouts on a good
+    night stops being read on a bad one.
+    """
+    if health is None:
+        return ""
+    if health.level == heartbeat.OK:
+        return f"[{health.level}] {health.headline}"
+    return f"[{health.level}] {health.headline}\n        {health.detail}"
+
+
+def _render_health_html(health: "Health | None") -> str:
+    """The banner. Everything inside is HTML-escaped: `detail` carries free
+    text assembled from paths, step names and store directories, none of
+    which this module controls."""
+    if health is None:
+        return ""
+    cls = {
+        heartbeat.OK: "health-ok",
+        heartbeat.WARN: "health-warn",
+        heartbeat.ALARM: "health-alarm",
+        heartbeat.UNKNOWN: "health-unknown",
+    }.get(health.level, "health-unknown")
+    return (f'<div class="health {cls}">'
+            f'<span class="headline">{html.escape(health.level)} -- '
+            f'{html.escape(health.headline)}</span>'
+            f'<span class="detail">{html.escape(health.detail)}</span>'
+            "</div>")
+
+
 def render_html(rows: Sequence[BoardRow], *, title: str,
-                generated_at: datetime) -> str:
+                generated_at: datetime,
+                health: "Health | None" = None) -> str:
     """A self-contained HTML board -- no CDN, no external font, no fetch.
     Everything is one inline `<style>` block and literal table markup; the
     guard is that no `http://` or `https://` substring appears anywhere in
-    the output (contracts section 5, s5_snapshots_board tests)."""
+    the output (contracts section 5, s5_snapshots_board tests).
+
+    `health` is optional so the existing callers and their tests are
+    unchanged: None emits no banner at all. `write_report` below always
+    supplies one, which is what makes the published report unable to hide a
+    failed night.
+    """
     knob_names = list(dict.fromkeys(k.knob for r in rows for k in r.knobs))
     knob_headers = "".join(f"<th>{html.escape(name)}</th>" for name in knob_names)
 
@@ -361,10 +415,16 @@ def render_html(rows: Sequence[BoardRow], *, title: str,
                 knob_cells.append("<td>-</td>")
                 continue
             cls = "pass" if k.passed else ("unknown" if k.passed is None else "fail")
+            # The note is why a knob is unknown -- "1-day window against a
+            # threshold intended for 30 days", "no ETA observed". It was
+            # rendered in the terminal table and dropped from the HTML, so
+            # the one sentence explaining a `?` never reached the report.
+            note = (f"<br><span class=\"knob-note\">{html.escape(k.note)}</span>"
+                    if k.note else "")
             knob_cells.append(
                 f"<td>{html.escape(_fmt(k.value))} / {html.escape(_fmt(k.threshold))}"
                 f"<br><span class=\"{cls}\">{html.escape(_fmt_pass(k.passed))}</span>"
-                f" cov={k.coverage:.0%}</td>"
+                f" cov={k.coverage:.0%}{note}</td>"
             )
 
         str_note = ""
@@ -392,7 +452,8 @@ def render_html(rows: Sequence[BoardRow], *, title: str,
         f"<h1>{html.escape(title)}</h1>"
         f"<div class=\"meta\">generated {html.escape(generated_at.isoformat())}"
         f" -- {len(rows)} rows</div>"
-        "<table><thead><tr>"
+        + _render_health_html(health)
+        + "<table><thead><tr>"
         "<th>level</th><th>key</th><th>tier</th><th>str_source</th>"
         "<th>score</th><th>max_cost@floor</th><th>max_cost@median</th>"
         f"{knob_headers}</tr></thead>"
@@ -402,15 +463,27 @@ def render_html(rows: Sequence[BoardRow], *, title: str,
 
 
 def write_report(rows: Sequence[BoardRow], data_dir: Path | str, *,
-                 name: str | None = None) -> Path:
-    """Write the HTML board under DATA_DIR/reports/. Returns the path."""
+                 name: str | None = None,
+                 health: "Health | None" = None) -> Path:
+    """Write the HTML board under DATA_DIR/reports/. Returns the path.
+
+    ALWAYS carries a health banner. `data_dir` is already everything
+    `heartbeat.health_for` needs, so this reads the assessment itself rather
+    than taking it as an argument a caller could forget -- which means the
+    real report cannot be published without one. `heartbeat.health_for`
+    never raises: a corrupt heartbeat or an unopenable store degrades to an
+    UNKNOWN banner rather than taking the board down with it.
+    """
     out_dir = Path(data_dir) / _REPORT_DIR_NAME
     out_dir.mkdir(parents=True, exist_ok=True)
     generated_at = datetime.now(UTC)
     filename = name or f"niche-board-{generated_at.strftime('%Y%m%dT%H%M%SZ')}.html"
     path = out_dir / filename
+    if health is None:
+        health = heartbeat.health_for(data_dir, now=generated_at)
     path.write_text(
-        render_html(rows, title="eBay niche board", generated_at=generated_at),
+        render_html(rows, title="eBay niche board", generated_at=generated_at,
+                    health=health),
         encoding="utf-8",
     )
     return path

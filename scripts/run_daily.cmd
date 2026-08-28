@@ -16,12 +16,22 @@ REM with no console attached, which is exactly how Task Scheduler launches
 REM it. That looks identical to a successful no-op run and is worse than a
 REM visible crash, because nothing downstream notices the sweep never ran.
 REM
-REM Task Scheduler: create a daily trigger at 03:00 (spec section 10), action
-REM = this file, "Start in" = the repo root. From an elevated prompt:
+REM Task Scheduler: do NOT point a trigger at this file directly. The task
+REM action is scripts\run_daily_scheduled.cmd, which pins the interpreter and
+REM runs scripts\nightly.py -- the lock, the day-guard, the log and the
+REM heartbeat all live there, and without them a skipped or killed night
+REM leaves no trace at all. Register it with:
 REM
-REM   schtasks /create /tn "PhoneLoop eBay Daily" ^
-REM     /tr "\"C:\Users\sampo\OneDrive\Desktop\Python projects\PhoneLoop\scripts\run_daily.cmd\"" ^
-REM     /sc daily /st 03:00
+REM   .\scripts\register_daily_task.ps1 -Force
+REM
+REM PHONELOOP_DATA_DIR is defaulted BELOW, inside this file, not in the task
+REM definition -- a Task Scheduler action carries no environment of its own,
+REM so a variable set there would simply be absent. Without the default a
+REM scheduled night writes to ~\.phoneloop\data (68 parquet files, all
+REM source=vinted, zero eBay) and orphans the eBay snapshot corpus: the board
+REM would print "only one snapshot date" forever while every run exited 0.
+REM `if not defined` is load-bearing -- every documented manual run exports
+REM the variable by hand and must keep winning.
 REM
 REM Each step below checkpoints on its own: bulk_ebay.py's existing
 REM checkpoint/resume behaviour (contracts section "s2_html_transport") is
@@ -94,6 +104,7 @@ if errorlevel 1 (
 )
 
 set "PHONELOOP_HARNESS=live"
+if not defined PHONELOOP_DATA_DIR set "PHONELOOP_DATA_DIR=%USERPROFILE%\.phoneloop\prod"
 
 echo [run_daily] %DATE% %TIME% -- [1/3] SWEEP
 "%PY%" scripts\bulk_ebay.py --leaf-sweep --pages-per-shard 10
