@@ -30,25 +30,34 @@ REM store, so a step that fails here can simply be re-run -- by hand, or by
 REM tomorrow's 03:00 trigger -- and it picks up where it left off rather
 REM than redoing completed work.
 REM
-REM ASSUMED CLI, checked at integration (2026-08-28, round 2):
-REM   --leaf-sweep     is s2's own flag; argparse accepts it and it takes the
-REM                     shape this file assumes. The section 6.3 offline
-REM                     end-to-end run ("bulk_ebay.py --leaf-sweep
-REM                     --max-pages 3 --fresh") still does NOT get past its
-REM                     first shard against fixtures/ebay/ as they exist
-REM                     today: scripts/record_ebay.py and scripts/bulk_ebay.py
-REM                     now build the SAME URL and the SAME cassette key
-REM                     (phoneloop.ebay.search_url / .search_key, round-2
-REM                     integration fix -- they used to drift, see
-REM                     phoneloop/ebay.py's module docstring), but the
-REM                     recordings under PHONELOOP_FIXTURES were captured
-REM                     BEFORE that fix, under the old narrower shape, so
-REM                     they still raise MissingRecording -- correct per
-REM                     contracts section 6.3 ("a missing recording raises
-REM                     rather than producing an empty board"), and this flag
-REM                     remains unverified end to end offline until a fresh
-REM                     recording session runs under the now-aligned code.
-REM                     See the integration report's unverified[].
+REM VERIFIED 2026-08-28 (session 2; docs/superpowers/proof, section 9):
+REM   --leaf-sweep      sweeps catalog_ebay.IN_SCOPE with _fsrp=1 in the URL.
+REM                     Without it eBay redirects a category-only search
+REM                     to a /b/ browse node that lists nothing, and the
+REM                     sweep would have booked that as an empty shard.
+REM                     Replayed end to end on 12 recorded pages (4 hubs)
+REM                     into a populated board.
+REM   --pages-per-shard caps page loads PER HUB. 10 here = up to ~430 page
+REM                     loads a night (~1 h at the measured ~9 s/page).
+REM                     Raise it toward 42 (the 10,000-result cap) for full
+REM                     Tier 1 coverage once that runtime is acceptable.
+REM   checkpoint        dated per UTC day (bulk_ebay_checkpoint_YYYY-MM-DD
+REM                     .json): a failed night resumes, the next night
+REM                     starts clean -- Tier 3 needs the whole population
+REM                     re-observed, not the pages past yesterday's stop.
+REM
+REM EGRESS (measured 2026-08-28): eBay refuses the bundled Playwright
+REM Chromium build and any VPN/datacenter exit, and the residential proxy
+REM exit was refused too. PHONELOOP_CHROME_EXE in ~\.phoneloop\.env points
+REM at a Chrome for Testing build that is split-tunnelled out of Mullvad by
+REM path (`mullvad split-tunnel get` lists it). Machine config, not repo
+REM config -- nothing in this file sets it.
+REM
+REM PHONELOOP_HARNESS=live below is load-bearing. The harness default is
+REM replay, under which a live night raises MissingRecording on its first
+REM unrecorded page (proof section 9.6 shows exactly that raise). live =
+REM real requests, no fixtures written; a deliberate recording session
+REM sets record by hand instead.
 REM   --deepen          NOW SHIPPED (round-2 integration fix): scripts/
 REM                     bulk_ebay.py's `run_deepen` wires ebay_item.py's
 REM                     item-page parser (parse_item, to_row_updates) into
@@ -84,8 +93,10 @@ if errorlevel 1 (
     exit /b 1
 )
 
+set "PHONELOOP_HARNESS=live"
+
 echo [run_daily] %DATE% %TIME% -- [1/3] SWEEP
-"%PY%" scripts\bulk_ebay.py --leaf-sweep
+"%PY%" scripts\bulk_ebay.py --leaf-sweep --pages-per-shard 10
 if errorlevel 1 (
     echo [run_daily] SWEEP failed -- checkpointed, safe to re-run
     exit /b 1

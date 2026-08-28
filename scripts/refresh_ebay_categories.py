@@ -70,6 +70,7 @@ from urllib.parse import urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from phoneloop import harness, proxies  # noqa: E402
+from phoneloop.browser import launch as launch_browser  # noqa: E402
 from phoneloop.catalog_ebay import IN_SCOPE, TREE_PATH  # noqa: E402
 from phoneloop.harness import Cassette, recorded  # noqa: E402
 
@@ -428,8 +429,8 @@ def main() -> int:
         if not offline:
             from playwright.sync_api import sync_playwright
             pw = stack.enter_context(sync_playwright())
-            browser = pw.chromium.launch(
-                headless=args.headless, channel="chrome",
+            browser = launch_browser(
+                pw, headless=args.headless,
                 proxy=playwright_proxy() if args.proxy else None)
             stack.callback(browser.close)
             page = browser.new_page(locale="en-GB")

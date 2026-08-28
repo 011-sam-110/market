@@ -67,8 +67,17 @@ DEFAULT_PRICE_TO = 55
 
 _SEARCH_URL_NKW = ("https://www.ebay.co.uk/sch/i.html?_nkw={term}&_ipg=240&_pgn={page}"
                     "&_udlo={lo}&_udhi={hi}")
-_SEARCH_URL_SACAT = ("https://www.ebay.co.uk/sch/i.html?_sacat={term}&_ipg=240&_pgn={page}"
-                      "&_udlo={lo}&_udhi={hi}")
+# _fsrp=1 is load-bearing on the category-only shape. Without it eBay
+# redirects the request to the /b/bn_<n> browse node of that category --
+# every variant measured 2026-08-28 did (plain, rt=nc, empty _nkw, _sop=12,
+# LH_BIN=1, page 2, the /sch/<id>/i.html path form) -- and the browse node
+# of a hub such as 26677 lists no items at all, which the sweep would have
+# recorded as "swept, genuinely nothing there". With it, 26677 and 9394
+# both stayed on a 256-row results page, page 2 included, band applied.
+# Keyword (_nkw=) searches never redirect. `is_browse_redirect` below is
+# the guard for the day this stops being enough.
+_SEARCH_URL_SACAT = ("https://www.ebay.co.uk/sch/i.html?_sacat={term}&_fsrp=1&_ipg=240"
+                      "&_pgn={page}&_udlo={lo}&_udhi={hi}")
 
 
 def search_key(mode: str, term: str, lo: int, hi: int, pgn: int) -> str:
@@ -87,6 +96,15 @@ def search_url(mode: str, term: str, lo: int, hi: int, pgn: int) -> str:
     template = _SEARCH_URL_SACAT if mode == "sacat" else _SEARCH_URL_NKW
     encoded = quote_plus(term) if mode == "nkw" else term
     return template.format(term=encoded, page=pgn, lo=lo, hi=hi)
+
+
+def is_browse_redirect(url: str) -> bool:
+    """True when a search landed on a /b/ browse node instead of /sch/ --
+    eBay answered with a category landing page, not results. Callers treat
+    it as a failed fetch, never as an empty page: the browse node of a hub
+    shows nothing while the category holds a million listings (26677,
+    measured 2026-08-28)."""
+    return urlsplit(url).path.startswith("/b/")
 
 
 _PRICE_RE = re.compile(r"£\s*([\d,]+\.\d{2})")

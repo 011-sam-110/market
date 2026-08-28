@@ -309,3 +309,44 @@ off and retry direct later. A blocked fetch marks a niche **unknown**, never emp
 - **M4 — validation loop.** Terapeak validation table; derived-vs-official error per
   identity tier; decide whether derived STR stays.
 - **M5 — fallback transport**, if not already built as primary.
+
+## 15. Live corrections, 2026-08-28 (measured during the first recording session)
+
+Four claims above turned out to be wrong or incomplete once the built sweep ran
+live. Each is corrected here rather than silently edited into the sections
+above, so the record shows what the design believed and what the market did.
+
+1. **The browser build is the gate, not the address.** From the home IP
+   (86.20.84.13) eBay served the 403 "Something went wrong" page to Playwright's
+   bundled Chromium 148 — with and without `navigator.webdriver` and
+   `--enable-automation` suppressed — and a 200 to Chrome for Testing 152 at the
+   same address, minutes apart. §2 and §11 assumed "headed Chrome" was one thing.
+   The binary is now configured by `PHONELOOP_CHROME_EXE` (`phoneloop/browser.py`),
+   defaulting to the installed Chrome.
+2. **The residential proxy is a second chance, not a fallback.** Its exit (a US
+   residential address) was refused on the homepage the same night; on 2026-08-27
+   it 403'd the search page 2/2. §10's "escalate to the proxy" stays, but nothing
+   may depend on it. The machine-wide VPN (Mullvad) put direct egress on a
+   datacenter exit eBay refuses outright; the fix is a per-executable split
+   tunnel for the automation binary only, never the whole machine.
+3. **A category-only search does not return a results page.** `sch/i.html?_sacat=…`
+   with no keyword is redirected to the category's `/b/bn_<n>` browse node for
+   every variant tried (plain, `rt=nc`, empty `_nkw`, `_sop=12`, `LH_BIN=1`, page 2,
+   the `/sch/<id>/i.html` path form), and a hub's browse node lists nothing at all
+   — the sweep would have recorded `done=0`, "genuinely nothing there", and the
+   board would have stayed empty with every test green. `_fsrp=1` keeps the request
+   on a 256-row results page (page 2 included, price band applied). It is now part
+   of `phoneloop.ebay.search_url`, and a landing on `/b/` raises
+   `RedirectedOffResults` instead of counting as an empty shard.
+4. **§9's "43 leaves" are second-level hubs**, not eBay leaves — `Dog Supplies`,
+   `Bathroom Fixtures, Accessories & Supplies`, `Mobile Phone Accessories`
+   (1.59 M results). With `_fsrp=1` a hub sweeps fine, but the 10,000-result cap
+   then bites per hub × price band, so Tier 1 sees the Best-Match head of each hub,
+   not its whole population. Descending to true leaves is a Tier-1 follow-up, not
+   a blocker for stage one.
+
+Two operational fixes landed with them: the sweep checkpoint is dated per UTC day
+(`bulk_ebay_checkpoint_YYYY-MM-DD.json`), so day two re-observes the population
+Tier 3 differences instead of skipping every shard day one finished; and
+`--pages-per-shard` bounds each leaf, where `--max-pages` budgeted the whole run
+and let one hub consume it.

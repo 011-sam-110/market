@@ -37,6 +37,7 @@ from urllib.parse import urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from phoneloop import harness, proxies  # noqa: E402
+from phoneloop.browser import launch as launch_browser  # noqa: E402
 from phoneloop.ebay import (  # noqa: E402
     DEFAULT_PRICE_FROM, DEFAULT_PRICE_TO, search_key, search_url,
 )
@@ -100,7 +101,7 @@ def warm_up(page) -> str:
 def open_session(pw):
     """Direct first; fall back to the residential proxy only if the homepage
     load itself comes back blocked. Returns (browser, page, used_proxy)."""
-    browser = pw.chromium.launch(headless=False, channel="chrome", proxy=None)
+    browser = launch_browser(pw, headless=False, proxy=None)
     page = browser.new_page(locale="en-GB")
     body = warm_up(page)
     if not is_blocked(body, page.url):
@@ -114,7 +115,7 @@ def open_session(pw):
     if proxy is None:
         raise RuntimeError(
             "direct egress blocked and no PHONELOOP_PROXY_URL is configured")
-    browser = pw.chromium.launch(headless=False, channel="chrome", proxy=proxy)
+    browser = launch_browser(pw, headless=False, proxy=proxy)
     page = browser.new_page(locale="en-GB")
     body = warm_up(page)
     if is_blocked(body, page.url):

@@ -793,6 +793,214 @@ there before any of this proof's commands ran).
 
 ---
 
+## 9. Session 2 — 2026-08-28: the live recording, and what it found
+
+Written by the orchestrating session, not by an independent verifier. Every
+number below is copied from a log on disk (paths given), none is computed
+here. The overseer's "NOT accepted" verdict above stands until an independent
+pass re-reads this section.
+
+### 9.1 The first live recording failed at the front door
+
+`~/.phoneloop/e2e_main/record_session.log` (04:42): *"blocked on both direct
+and the residential proxy -- eBay refused the homepage load either way"*.
+Three layers, separated one probe at a time (probes kept under
+`~/.phoneloop/e2e_main/probe_*.py`; headed browser, no login, eBay UK
+homepage):
+
+| probe | exit address | build | homepage |
+|---|---|---|---|
+| direct, Mullvad connected | 194.110.115.12 (Belgian relay) | Playwright Chromium 148 | 403 "Something went wrong" |
+| residential proxy | 70.119.241.208 (US exit) | Playwright Chromium 148 | 403 |
+| home line (Mullvad split tunnel on that exe) | 86.20.84.13 | Playwright Chromium 148 | 403 |
+| home line, `--disable-blink-features=AutomationControlled`, `--enable-automation` removed | 86.20.84.13 | Playwright Chromium 148 | 403 |
+| home line (split tunnel on that exe) | 86.20.84.13 | Chrome for Testing 152 | **200** |
+
+The VPN was one layer, the browser build the second, and the proxy is not a
+fallback for eBay at all — it was refused on the homepage tonight and 403'd
+the search page 2/2 on 2026-08-27. Fix: `phoneloop/browser.py` picks the
+binary from `PHONELOOP_CHROME_EXE` (secrets file), falling back to the
+installed Chrome; only the Chrome for Testing executable is exempted from
+Mullvad (`mullvad split-tunnel app add <exe>`), so the user's own browser and
+everything else stay inside the VPN.
+
+### 9.2 The sweep's URL shape could never have produced a results page
+
+With a working browser, the sweep's own URL
+(`sch/i.html?_sacat=26677&_ipg=240&_pgn=1&_udlo=15&_udhi=55`) came back
+HTTP 200 with **0 `/itm/` links**: eBay had redirected it to `/b/bn_821820`,
+the browse landing page of "Bathroom Fixtures, Accessories & Supplies", which
+lists subcategories and no items. Every variant did the same — `rt=nc`, empty
+`_nkw=`, `_sop=12`, `LH_BIN=1`, page 2, the `/sch/26677/i.html` path form,
+and the browse page itself with price parameters. Under the sweep's rules
+that page is `raw == []` → `done[key] = 0`, "empty - end of results": a
+silently empty board with every test green. No `sacat` recording had ever
+existed, so nothing had ever exercised this shape live.
+
+`_fsrp=1` keeps eBay on the results page (`probe_fsrp.py`):
+
+| URL | final URL | DOM rows | first-price range |
+|---|---|---|---|
+| `_sacat=9394&_fsrp=1&_udlo=15&_udhi=55&_ipg=240&_pgn=1` | `/sch/i.html?…` | 256 | £2.99–£149.95 |
+| `_sacat=26677&_fsrp=1&…&_pgn=1` | `/sch/i.html?…` | 256 | £0.99–£54.99 |
+| `_sacat=26677&_fsrp=1&…&_pgn=2` | `/sch/i.html?…` | 256 | £0.99–£54.99 |
+| `_sacat=9394&LH_ItemCondition=1000&…` (no `_fsrp`) | `/b/bn_450670` | 62 | — |
+
+(256 DOM rows = 240 listings plus the decoy/template rows the parser already
+drops; "first-price" is the first £ figure in each row, so variation
+listings show their range floor, which is why the band looks wider than
+15–55.)
+
+A second finding from the same probes: the 43 "leaves" in
+`ebay_categories.json` are second-level hubs (Dog Supplies, Home Bedding,
+Mobile Phone Accessories at 1,589,235 results), exactly as
+`scripts/refresh_ebay_categories.py`'s docstring already said. With `_fsrp=1`
+a hub sweeps fine; the 10,000 cap then applies per hub × band.
+
+### 9.3 Fixes, each watched red then green
+
+| test | red (before) | green (after) | pins |
+|---|---|---|---|
+| `tests/test_ebay_search_url.py::test_sacat_search_forces_the_results_page` | `AssertionError: assert '_fsrp=1' in '…_sacat=26677&_ipg=240&_pgn=1&_udlo=15&_udhi=55'` | pass | `_fsrp=1` in the sacat template; `nkw` untouched; `search_key` unchanged so today's recordings keep their names |
+| `…::test_browse_node_redirect_is_detected` | `ImportError: cannot import name 'is_browse_redirect'` | pass | `phoneloop.ebay.is_browse_redirect` |
+| `tests/test_bulk_ebay_checkpoint.py::test_browse_redirect_is_a_failure_not_an_empty_shard` | `AttributeError: … no attribute 'RedirectedOffResults'` | pass | `fetch_page` raises on a `/b/` landing; the loop logs it under `blocked`, no proxy escalation, never `done=0` |
+| `…::test_default_checkpoint_is_dated`, `…::test_next_day_gets_a_fresh_checkpoint` | `AttributeError: … no attribute 'default_checkpoint_path'` | pass | `bulk_ebay_checkpoint_YYYY-MM-DD.json` — the integration review's blocking item [1/3] |
+| `…::test_pages_per_shard_bounds_each_shard`, `…::test_zero_means_the_cap_derived_maximum` | 2 failed | pass | `--pages-per-shard`; `--max-pages` budgets the whole run and one hub would spend it |
+| `tests/test_browser.py` (3 tests) | `ModuleNotFoundError: No module named 'phoneloop.browser'` | pass | `PHONELOOP_CHROME_EXE` → `executable_path`, blank/unset → `channel="chrome"` |
+
+Full suite after: **673 passed** (660 at §2 + 13).
+
+### 9.4 The recording that then worked — and was stopped
+
+`~/.phoneloop/e2e_main/record_session2.log`, 05:09, `PHONELOOP_HARNESS=record`,
+Chrome for Testing, `egress: DIRECT`:
+
+```
+   26677   p1   256 rows 248 new  100% UK (observation only)  (+256 stored)
+   26677   p2   256 rows 226 new  100% UK (observation only)  (+256 stored)
+   26677   p3   240 rows 226 new  100% UK (observation only)  (+240 stored)
+   20444   p1   256 rows 246 new  100% UK (observation only)  (+256 stored)
+   20444   p2   256 rows 232 new  100% UK (observation only)  (+256 stored)
+   20444   p3   240 rows 230 new   97% UK (observation only)  (+240 stored)
+   262975  p1   256 rows 248 new   98% UK (observation only)  (+256 stored)
+   262975  p2   256 rows 232 new   98% UK (observation only)  (+256 stored)
+   262975  p3   240 rows 222 new   97% UK (observation only)  (+240 stored)
+   16086   p1   256 rows 247 new   99% UK (observation only)  (+256 stored)
+   16086   p2   256 rows 233 new   98% UK (observation only)  (+256 stored)
+   16086   p3   240 rows 224 new   96% UK (observation only)  (+240 stored)
+```
+
+The background task was stopped from outside this session after the fourth
+hub (4 of 43; 12 pages; ~82 KB gzip per page under
+`~/.phoneloop/fixtures/ebay/sacat-*`; the dated checkpoint holds the first
+three hubs). The Tier-2 `--deepen` pass never started. Nothing was relaunched.
+Resuming is the same command without `--fresh` — the dated checkpoint picks up
+at hub 5 — followed by `--deepen --deepen-limit 120`.
+
+### 9.5 The offline chain on those recordings
+
+`~/.phoneloop/e2e_replay/chain.log`, `PHONELOOP_HARNESS` unset (replay),
+`PHONELOOP_FIXTURES=~/.phoneloop/fixtures`, empty `PHONELOOP_DATA_DIR`:
+
+1. `refresh_ebay_categories.py --offline` — `harness: replay, 57 ebay_categories recordings`, exit 0.
+2. `bulk_ebay.py --leaf-sweep --pages-per-shard 3 --max-pages 12 --fresh` —
+   `harness: replay, 19 ebay recordings`; the same 12 pages with row counts
+   identical to the live log; `page budget spent`;
+   `swept 2,811 unique eBay listings in 0.0 min`; exit 0.
+3. `niche_board.py --products --html` — exit 0,
+   `wrote …/e2e_replay/reports/niche-board-20260828T041238Z.html`.
+
+The NICHES block, first two rows verbatim:
+
+```
+only one snapshot date (2026-08-28) -- every sell-through figure below is 'lifetime', not 'window'
+
+=== NICHES ===
+LEVEL   KEY                       TIER       STR_SRC   SCORE   MAXCOST@FLOOR   MAXCOST@MED
+------------------------------------------------------------------------------------------
+niche   20444                     none       lifetime    0.0               ?             ? (lifetime - not comparable to the sell-through threshold)
+        leaf:20444
+          min_margin     value=?                threshold=0                  [?] denom=0 cov=0% -- max_cost at price_floor_pence (no median price observed); positive means a supplier price exists that clears the margin
+          sell_through   value=491              threshold=5000               [?] denom=322 cov=45% -- lifetime figure only (no second snapshot yet) - not comparable to the window threshold
+          price_band     value=?                threshold=(1500, 5500)       [?] denom=0 cov=0% -- no business landed price observed
+          delivery       value=?                threshold=7                  [?] denom=0 cov=0% -- no ETA observed on a business listing
+          seller_quality value=(9970, 23700)    threshold=(9500, 50)         [PASS] denom=702 cov=99%
+          saturation     value=321              threshold=15                 [FAIL] denom=1 cov=100%
+niche   26677                     none       lifetime    0.0               ?             ? (lifetime - not comparable to the sell-through threshold)
+        leaf:26677
+          min_margin     value=?                threshold=0                  [?] denom=0 cov=0% -- max_cost at price_floor_pence (no median price observed); positive means a supplier price exists that clears the margin
+          sell_through   value=684              threshold=5000               [?] denom=377 cov=54% -- lifetime figure only (no second snapshot yet) - not comparable to the window threshold
+          price_band     value=?                threshold=(1500, 5500)       [?] denom=0 cov=0% -- no business landed price observed
+          delivery       value=?                threshold=7                  [?] denom=0 cov=0% -- no ETA observed on a business listing
+          seller_quality value=(9970, 25000)    threshold=(9500, 50)         [PASS] denom=691 cov=99%
+          saturation     value=351              threshold=15                 [FAIL] denom=1 cov=100%
+```
+
+PRODUCTS: 20 rows — 19 title clusters and one catalogued product
+(`epid:15026963490`, "Luxury Bathroom Chrome Sink Bath Filler Tap Shower Mixer
+Taps with Hand Held Set", `sell_through value=122 … denom=3 cov=60%`,
+`seller_quality (9950, 11100) [PASS] denom=5`, `saturation value=2 [PASS]`).
+Two more verbatim:
+
+```
+product cluster:26677:191         cluster    lifetime    2.0               ?             ? (lifetime - not comparable to the sell-through threshold)
+        New Waterfall Bathroom Taps Chrome Basin Mixer Bath Filler Shower Deck Tap Sets
+          sell_through   value=625              threshold=5000               [?] denom=5 cov=62% -- lifetime figure only (no second snapshot yet) - not comparable to the window threshold
+          seller_quality value=(9930, 70000)    threshold=(9500, 50)         [PASS] denom=8 cov=100%
+          saturation     value=5                threshold=15                 [PASS] denom=1 cov=100%
+product cluster:20444:238         cluster    lifetime    2.0               ?             ? (lifetime - not comparable to the sell-through threshold)
+        Hotel Quality Mattress Topper 10cm Deep Thick Single Double King Super All SIZES
+          sell_through   value=208              threshold=5000               [?] denom=6 cov=55% -- lifetime figure only (no second snapshot yet) - not comparable to the window threshold
+          seller_quality value=(9950, 4700)     threshold=(9500, 50)         [PASS] denom=11 cov=100%
+          saturation     value=9                threshold=15                 [PASS] denom=1 cov=100%
+```
+
+What the board says about itself, and correctly: one snapshot date, so every
+sell-through figure is `lifetime` and `[?]`; `min_margin`, `price_band` and
+`delivery` are `?` with `denom=0` because they are defined over BUSINESS
+listings and `seller_type` only arrives with Tier 2 — the pass that was
+stopped. `seller_quality` and `saturation` have real denominators (702, 696,
+691, 684 sellers per hub; 3–12 per product cluster). Unknown stayed unknown;
+nothing was scored as zero. Three product rows carry the title
+`NEW LOW PRICE` — a promo banner the row parser took for the title on
+listings whose first text line is that badge; a parser follow-up, and
+visible on the board rather than hidden.
+
+### 9.6 Rail 1 again, on the real gap
+
+`~/.phoneloop/e2e_rail/rail.log`: the same replay without `--max-pages`.
+Twelve pages stored, then:
+
+```
+phoneloop.harness.MissingRecording: no recording for ebay/sacat:25863:15-55:p1
+  key: sacat-25863-15-55-p1-271ac761
+  capture it with: PHONELOOP_HARNESS=record python scripts/capture.py
+```
+
+exit 1. Hub 5 was never recorded; the sweep said so instead of producing an
+empty page.
+
+### 9.7 `run_daily.cmd` was not runnable as committed
+
+It never set `PHONELOOP_HARNESS`. The harness default is `replay`, so the
+03:00 job would have raised `MissingRecording` on its first unrecorded page
+every night — §9.6 is that raise. It now sets `PHONELOOP_HARNESS=live`, runs
+`--leaf-sweep --pages-per-shard 10` (≈430 page loads, ~1 h) and its stale
+"still does NOT get past its first shard" note is replaced. It has NOT been
+scheduled: `schtasks` has not been run.
+
+### 9.8 Still unverified after this session
+
+- 39 of 43 hubs unrecorded; Tier 2 deepen unrun on the recorded rows, so every
+  business-only knob on the board is `?`. Resume the stopped session to close
+  both.
+- Tier 3 differencing needs a second day of data.
+- Whether `_fsrp=1` holds past page 3 and at the 10,000 cap.
+- The `NEW LOW PRICE` title capture (three of twenty product rows).
+- The Mullvad split-tunnel entries and `PHONELOOP_CHROME_EXE` are machine
+  state, not repo state; a Chrome for Testing upgrade changes the path.
+- `build/s3_api_transport` unchanged; the developer keyset is still pending.
+
 ## Commit
 
 Proof doc committed alone, explicit path, on `feat/ebay-niche-finder`:

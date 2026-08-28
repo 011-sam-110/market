@@ -15,11 +15,17 @@ count is to see the whole market, overseas rows included, not to throw the
 page away because too much of it is overseas.
 
 Egress: direct first, the residential proxy only after eBay blocks the
-initial homepage load (measured, 2026-08-27: a headed session gets one page
-directly before a captcha or an error page; the proxy is reliable). Decided
-once at the start of the run -- the same pattern scripts/record_ebay.py
-uses -- and escalated again, once, if a page mid-run comes back blocked while
-still on direct.
+initial homepage load. Decided once at the start of the run -- the same
+pattern scripts/record_ebay.py uses -- and escalated again, once, if a page
+mid-run comes back blocked while still on direct. What a homepage block
+turned out to mean on 2026-08-28 was the BROWSER BUILD, not the address:
+from the home IP the bundled Playwright Chromium 148 got the 403 error page
+and Chrome for Testing 152 got a 200, while the proxy exit (a US
+residential address) was refused as well. So the proxy fallback is a second
+chance, not a reliable one, and the binary is chosen by phoneloop.browser
+(PHONELOOP_CHROME_EXE in the secrets file). A machine-wide VPN puts direct
+egress on a datacenter exit eBay refuses outright; the fix in use is a
+per-executable Mullvad split tunnel for that one binary, never the machine.
 
 Two sweep modes, same storage path:
 
@@ -89,15 +95,18 @@ import contextlib
 import json
 import sys
 import time
+from datetime import UTC, date, datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from phoneloop import catalog, config, harness, proxies  # noqa: E402
+from phoneloop.browser import launch as launch_browser  # noqa: E402
 from phoneloop import ebay_item  # noqa: E402
 from phoneloop.ebay import (  # noqa: E402
-    DEFAULT_PRICE_FROM, DEFAULT_PRICE_TO, parse_rows, search_key, search_url,
+    DEFAULT_PRICE_FROM, DEFAULT_PRICE_TO, is_browse_redirect, parse_rows,
+    search_key, search_url,
     to_row, uk_share,
 )
 from phoneloop.harness import Cassette, recorded  # noqa: E402
@@ -121,6 +130,15 @@ NAV_TIMEOUT_MS = 75000
 # ceil(catalog.result_cap("ebay") / 240) -- the page budget a single shard
 # could ever need before it is either saturated or exhausted.
 MAX_PAGE = 42
+
+
+def pages_for_shard(limit: int) -> range:
+    """Page numbers one shard may load. `limit` is --pages-per-shard; 0 means
+    the cap-derived MAX_PAGE. Distinct from --max-pages, which budgets the
+    WHOLE run and would let a single 10,000-result hub spend it all before
+    the second shard started -- a recording session that wants three pages
+    of every leaf needs this one, not that one."""
+    return range(1, (limit or MAX_PAGE) + 1)
 
 _ROW_JS = """() => {
   const out = [];
@@ -163,7 +181,7 @@ def open_session(pw, *, headless: bool, force_direct: bool):
     `force_direct` (the --direct flag) skips the fallback entirely -- for
     deliberately testing direct-only behaviour, not for production sweeps.
     """
-    browser = pw.chromium.launch(headless=headless, channel="chrome", proxy=None)
+    browser = launch_browser(pw, headless=headless, proxy=None)
     page = browser.new_page(locale="en-GB")
     body = warm_up(page)
     if not is_blocked(body, page.url):
@@ -179,7 +197,7 @@ def open_session(pw, *, headless: bool, force_direct: bool):
     if proxy is None:
         raise RuntimeError(
             "direct egress blocked and no PHONELOOP_PROXY_URL is configured")
-    browser = pw.chromium.launch(headless=headless, channel="chrome", proxy=proxy)
+    browser = launch_browser(pw, headless=headless, proxy=proxy)
     page = browser.new_page(locale="en-GB")
     body = warm_up(page)
     if is_blocked(body, page.url):
@@ -188,6 +206,15 @@ def open_session(pw, *, headless: bool, force_direct: bool):
             "blocked on both direct and the residential proxy -- eBay "
             "refused the homepage load either way")
     return browser, page, True
+
+
+class RedirectedOffResults(RuntimeError):
+    """eBay answered a search URL with its /b/ browse node instead of the
+    results page. Not a block (HTTP 200, no captcha) and not an empty shard
+    (the browse node of a hub lists nothing while the category holds a
+    million listings) -- a third outcome that must stay visible. Measured
+    2026-08-28 on every category-only URL shape without _fsrp=1; see
+    phoneloop.ebay.search_url."""
 
 
 def fetch_page(page, url: str) -> list[dict]:
@@ -199,6 +226,8 @@ def fetch_page(page, url: str) -> list[dict]:
     body = page.inner_text("body")
     if is_blocked(body, page.url):
         raise RuntimeError("blocked (captcha or error page)")
+    if is_browse_redirect(page.url):
+        raise RedirectedOffResults(f"redirected off the results page to {page.url}")
     return page.evaluate(_ROW_JS)
 
 
@@ -352,6 +381,19 @@ def leaf_targets() -> list[tuple[str, str, str]]:
     return out
 
 
+def default_checkpoint_path(data_dir: Path, today: date | None = None) -> Path:
+    """Where the sweep checkpoints when --checkpoint is not given: one file
+    PER UTC DAY. scripts/run_daily.cmd runs without --fresh so a failed run
+    resumes, but a single undated file carried yesterday's done-set into
+    today, and the daily sweep would have skipped every shard it finished
+    the day before -- Tier 3 differences consecutive daily observations of
+    the SAME population, so a skipped shard is a hole in the difference,
+    not a saving. Same-day re-run: resumes. New day: starts clean. UTC
+    matches the store's snapshot dates (phoneloop.snapshots)."""
+    d = today or datetime.now(UTC).date()
+    return data_dir / f"bulk_ebay_checkpoint_{d:%Y-%m-%d}.json"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -364,7 +406,10 @@ def main() -> int:
     ap.add_argument("--price-to", type=int, default=DEFAULT_PRICE_TO,
                     help="pounds, --leaf-sweep only")
     ap.add_argument("--max-pages", type=int, default=0,
-                    help="stop after this many page loads (0 = unbounded)")
+                    help="stop after this many page loads IN TOTAL (0 = unbounded)")
+    ap.add_argument("--pages-per-shard", type=int, default=0,
+                    help="cap page loads PER SHARD (0 = MAX_PAGE, the cap-derived "
+                         "maximum); use this, not --max-pages, to sample every leaf")
     ap.add_argument("--target", type=int, default=0)
     ap.add_argument("--direct", action="store_true",
                     help="direct only; refuse the proxy fallback on a block")
@@ -394,7 +439,7 @@ def main() -> int:
                           limit=args.deepen_limit, headless=args.headless,
                           direct=args.direct)
 
-    cp_path = args.checkpoint or (cfg.DATA_DIR / "bulk_ebay_checkpoint.json")
+    cp_path = args.checkpoint or default_checkpoint_path(cfg.DATA_DIR)
     checkpoint: dict = {}
     if cp_path.exists() and not args.fresh:
         checkpoint = json.loads(cp_path.read_text(encoding="utf-8"))
@@ -451,7 +496,7 @@ def main() -> int:
 
         for mode, term, slug, leaf_cat_id, lo, hi in targets:
             cat_unique: set[str] = set()
-            for pgn in range(1, MAX_PAGE + 1):
+            for pgn in pages_for_shard(args.pages_per_shard):
                 key = search_key(mode, term, lo, hi, pgn)
                 if key in done:
                     continue
@@ -474,6 +519,14 @@ def main() -> int:
                     # request -- must propagate, not be swallowed as
                     # "blocked" (spec §10, build contract §6.3).
                     raise
+                except RedirectedOffResults as exc:
+                    # Not an egress problem, so no proxy escalation: the
+                    # URL shape is wrong for this category. Logged as
+                    # blocked (never done=0) so the next run retries it.
+                    reason = str(exc)[:80]
+                    print(f"   {term[:24]:<24} p{pgn:<3} REDIRECTED {reason}")
+                    blocked_log[key] = reason
+                    break
                 except Exception as exc:                     # noqa: BLE001
                     reason = str(exc)[:80]
                     print(f"   {term[:24]:<24} p{pgn:<3} BLOCKED {reason}")
@@ -488,9 +541,8 @@ def main() -> int:
                             # ExitStack callback above closes whichever one
                             # is current when the run ends, not this one.
                             browser.close()
-                            browser = pw.chromium.launch(
-                                headless=args.headless, channel="chrome",
-                                proxy=proxy)
+                            browser = launch_browser(
+                                pw, headless=args.headless, proxy=proxy)
                             page = browser.new_page(locale="en-GB")
                             used_proxy = True
                         else:
