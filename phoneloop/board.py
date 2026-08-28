@@ -65,6 +65,13 @@ class BoardRow:
     label: str                            # human-readable
     level: str                            # "niche" | "product"
     identity_tier: str
+    # The leaf this row sits in, carried explicitly. `key` is NOT parseable
+    # back into it: a niche key is "leaf@band" and a product key is
+    # "cluster:leaf:n" / "epid:...". Consumers that filter by leaf -- and
+    # scripts/niche_board.py and rank_products both do -- must read this
+    # rather than match the key against a set of leaf ids, which is exactly
+    # what silently emptied the board when the niche key gained its band.
+    leaf_category_id: str | None
     metrics: Metrics
     knobs: list[KnobResult]
     max_cost_at_floor_pence: int | None
@@ -136,6 +143,7 @@ def _build_row(*, key: str, label: str, level: str, identity_tier: str,
     )
     return BoardRow(
         key=key, label=label, level=level, identity_tier=identity_tier,
+        leaf_category_id=leaf_category_id,
         metrics=m, knobs=knob_results,
         max_cost_at_floor_pence=max_floor, max_cost_at_median_pence=max_median,
         str_source="window" if m.str_window_bp is not None else "lifetime",

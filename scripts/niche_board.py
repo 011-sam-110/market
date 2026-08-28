@@ -88,7 +88,11 @@ def main() -> int:
     known_leaves = set(catalog_ebay.top_level_of().keys())
     niche_rows = board.rank_niches(
         store, knobs, difference=diff, limit=args.limit * _OVERFETCH)
-    niche_rows = [r for r in niche_rows if r.key in known_leaves][:args.limit]
+    # Filter on the row's leaf, never on its key: a niche key carries the
+    # price band ("9355@15-55"), so matching it against raw leaf ids drops
+    # every niche and prints "(no rows)" as though the market were empty.
+    niche_rows = [r for r in niche_rows
+                  if r.leaf_category_id in known_leaves][:args.limit]
     print()
     print("=== NICHES ===")
     print(board.render_table(niche_rows))
@@ -96,7 +100,11 @@ def main() -> int:
     all_rows = list(niche_rows)
 
     if args.products:
-        top_niche_keys = [r.key for r in niche_rows]
+        # rank_products matches these against row["leaf_category_id"], so it
+        # wants leaves, not niche keys. Deduplicated because two price bands
+        # of one leaf are two niches but one leaf to scan for products.
+        top_niche_keys = list(dict.fromkeys(
+            r.leaf_category_id for r in niche_rows if r.leaf_category_id))
         product_rows = board.rank_products(
             store, knobs, top_niche_keys, difference=diff, limit=args.limit)
         print()
