@@ -264,6 +264,17 @@ def run_deepen(store: MarketStore, cassette: Cassette, *, offline: bool,
     listing rather than mutating the sweep row in place, and reliably
     outranks it in `rows_on`'s `ORDER BY seen_at DESC`.
 
+    CAVEAT (unverified, flagged rather than silently assumed): `board.py`'s
+    `_latest_rows` reads a single calendar date -- `rows_on(dates[-1])`.
+    This function is meant to run in the same daily invocation as the
+    sweep, immediately after it (scripts/run_daily.cmd's [2/3]), so the
+    deepened rows land on the SAME UTC date as the sweep they enrich. Run
+    it a calendar day or more after its sweep instead, and the deepened
+    rows alone become "the latest snapshot" -- the hundreds of un-deepened
+    listings that sweep also wrote would silently drop out of the board
+    until the next sweep. Not exercised here; a same-day production run
+    never hits it.
+
     A missing item-page recording for a candidate this function actually
     asked for propagates as `MissingRecording`, same as the sweep's own
     handling -- these are targeted lookups (rows this run chose to deepen),
