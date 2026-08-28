@@ -405,6 +405,20 @@ class MarketStore:
         a caller differencing two dates is never comparing the wrong pass
         within the same day.
 
+        Rows come back ORDERED BY source_id, and that ordering is load-bearing,
+        not cosmetic. Without it DuckDB's parallel parquet scan returns rows in
+        whatever order its threads finish, and `identity.cluster()` assigns
+        greedily -- each row joins the FIRST cluster it scores against -- so a
+        different read order draws different product boundaries. Measured on
+        the real 29,602-listing store before this was fixed, three runs over
+        the same static data gave 26,824 / 26,827 / 26,825 product groups.
+
+        That breaks the premise the harness exists to provide: a diff in the
+        output should mean a diff in the code. Sorting here rather than in each
+        caller means every consumer inherits reproducibility instead of having
+        to remember to ask for it. Sorted, not merely stable, so the answer
+        also survives files being rewritten or compacted.
+
         Every returned dict has all of `ROW_FIELDS` present. `read_parquet`'s
         `union_by_name=true` (see `sql()`) can only union columns that exist
         in at least one file on disk -- a store holding only legacy files
@@ -426,6 +440,7 @@ class MarketStore:
                 WHERE source = '{source}'
                   AND (seen_at AT TIME ZONE 'UTC')::DATE = DATE '{day_str}'
             ) WHERE rn = 1
+            ORDER BY source_id
         """)
         return [{name: d.get(name) for name in ROW_FIELDS}
                 for d in (dict(zip(rel.columns, row)) for row in rel.fetchall())]

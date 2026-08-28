@@ -160,9 +160,21 @@ def cluster(rows: Sequence[Mapping], *, threshold: float = JACCARD_MIN) -> list[
     Greedy single-pass assignment: each row joins the first existing cluster
     whose representative (its first member's shingle set) scores >=
     threshold against it, else starts a new cluster. Cluster ids are
-    assigned in order of first appearance (0, 1, 2...), so the same input
-    list always yields the same ids -- deterministic, and cheap enough to
+    assigned in order of first appearance (0, 1, 2...), and cheap enough to
     run over a whole niche on every pass.
+
+    ORDER-DEPENDENT, and that is the whole caveat. The same input list always
+    yields the same ids; a DIFFERENTLY ORDERED list of the same rows does not,
+    because "the first cluster it scores against" is a different cluster.
+
+    This docstring used to claim the function was "deterministic" full stop.
+    That was true about the function and false about the system: its caller
+    fed it `MarketStore.rows_on()`, which had no ORDER BY, so three runs over
+    one static store produced 26,824 / 26,827 / 26,825 product groups. A
+    guarantee is only as strong as its input, and a comment that states the
+    guarantee without naming the precondition hides the bug rather than
+    documenting it. rows_on() now sorts; callers assembling rows any other
+    way must impose their own stable order before calling this.
 
     Raises ValueError if `rows` span more than one leaf_category_id:
     clustering across niches is how "wireless charger" and "wireless
