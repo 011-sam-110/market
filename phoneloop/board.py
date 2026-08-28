@@ -151,6 +151,43 @@ def _build_row(*, key: str, label: str, level: str, identity_tier: str,
     )
 
 
+def group_products_in_leaf(leaf_rows: list[dict]) -> tuple[dict[str, list[dict]],
+                                                           dict[str, str]]:
+    """Group ONE leaf's rows into products, at the best tier each supports.
+
+    Returns (rows by product key, tier by product key).
+
+    Shared with scripts/bulk_ebay.py's Tier 2 targeting, which spends its
+    budget on rows that group into a product rather than on whatever the
+    store happens to return first. Both must group identically: if deepen
+    enriched a different set than the board reports on, the enrichment would
+    land on rows no product row ever reads.
+
+    Must be called per leaf -- identity.cluster() refuses rows spanning more
+    than one, since clustering across niches is how "wireless charger" and
+    "wireless doorbell" become one product.
+    """
+    tiers = [identity.tier_for(r) for r in leaf_rows]
+
+    cluster_rows = [r for r, t in zip(leaf_rows, tiers) if t == "cluster"]
+    cluster_ids = identity.cluster(cluster_rows) if cluster_rows else []
+    cluster_id_by_sid = {r["source_id"]: cid
+                         for r, cid in zip(cluster_rows, cluster_ids)}
+
+    groups: dict[str, list[dict]] = {}
+    tier_of_key: dict[str, str] = {}
+    for r, t in zip(leaf_rows, tiers):
+        if t == "none":
+            continue
+        key = (identity.product_key(r, t, cluster_id=cluster_id_by_sid[r["source_id"]])
+               if t == "cluster" else identity.product_key(r, t))
+        if key is None:
+            continue
+        groups.setdefault(key, []).append(r)
+        tier_of_key[key] = t
+    return groups, tier_of_key
+
+
 # --- ranking -----------------------------------------------------------------
 
 def rank_niches(store: MarketStore, knobs: Knobs, *,
@@ -219,23 +256,7 @@ def rank_products(store: MarketStore, knobs: Knobs,
 
     board_rows = []
     for leaf, leaf_rows in by_leaf.items():
-        tiers = [identity.tier_for(r) for r in leaf_rows]
-
-        cluster_rows = [r for r, t in zip(leaf_rows, tiers) if t == "cluster"]
-        cluster_ids = identity.cluster(cluster_rows) if cluster_rows else []
-        cluster_id_by_sid = {r["source_id"]: cid for r, cid in zip(cluster_rows, cluster_ids)}
-
-        groups: dict[str, list[dict]] = {}
-        tier_of_key: dict[str, str] = {}
-        for r, t in zip(leaf_rows, tiers):
-            if t == "none":
-                continue
-            key = (identity.product_key(r, t, cluster_id=cluster_id_by_sid[r["source_id"]])
-                  if t == "cluster" else identity.product_key(r, t))
-            if key is None:
-                continue
-            groups.setdefault(key, []).append(r)
-            tier_of_key[key] = t
+        groups, tier_of_key = group_products_in_leaf(leaf_rows)
 
         for key, prod_rows in groups.items():
             seller_ids = {r.get("seller_id") for r in prod_rows if r.get("seller_id")}

@@ -103,7 +103,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from phoneloop import catalog, config, harness, proxies  # noqa: E402
 from phoneloop.browser import launch as launch_browser  # noqa: E402
-from phoneloop import ebay_item  # noqa: E402
+from phoneloop import board, ebay_item  # noqa: E402
 from phoneloop.ebay import (  # noqa: E402
     DEFAULT_PRICE_FROM, DEFAULT_PRICE_TO, band_of, is_browse_redirect,
     niche_key, parse_rows, search_key, search_url, shard_for,
@@ -267,13 +267,51 @@ def rows_to_deepen(store: MarketStore, *, limit: int) -> list[dict]:
     from -- rather than a new store method, so this stays a caller of
     MarketStore's existing surface instead of growing a sibling stream's
     file for one script's convenience.
+
+    Ordered so the budget lands where the board reads it. Tier 2 buys a few
+    hundred page loads against a population of ~30,000, and the store's own
+    row order scatters them: on 2026-08-28, 99 item pages were fetched and
+    min_margin / price_band / delivery still read `?` at denom=0 cov=0%,
+    because almost none of the 99 belonged to a row the board reports.
+
+    The rows a board product row is made of are the ones that GROUP -- several
+    sellers listing the same item. Those are deepened first, largest group
+    first, via the same board.group_products_in_leaf the board itself uses, so
+    the two cannot drift into enriching one set and reporting another.
+
+    Ordering only. The seller_type and url filters are unchanged, the limit
+    still caps the batch, and ungrouped rows keep their place behind the
+    grouped ones rather than being dropped -- a store where nothing groups
+    must still deepen a full batch, or a bad grouping would silently starve
+    Tier 2 instead of failing.
     """
     dates = store.snapshot_dates(source="ebay")
     if not dates:
         return []
     rows = store.rows_on(dates[-1], source="ebay")
     candidates = [r for r in rows if r.get("url") and not r.get("seller_type")]
-    return candidates[:limit]
+    if not candidates:
+        return []
+
+    by_leaf: dict[str, list[dict]] = {}
+    for r in candidates:
+        leaf = r.get("leaf_category_id")
+        if leaf:
+            by_leaf.setdefault(leaf, []).append(r)
+
+    # source_id -> size of the product group it belongs to; absent = ungrouped
+    group_size: dict[str, int] = {}
+    for leaf_rows in by_leaf.values():
+        groups, _ = board.group_products_in_leaf(leaf_rows)
+        for prod_rows in groups.values():
+            for r in prod_rows:
+                group_size[r["source_id"]] = len(prod_rows)
+
+    # Stable sort on group size descending: rows in the biggest product groups
+    # first, everything else in the order the store returned it.
+    ordered = sorted(candidates,
+                     key=lambda r: -group_size.get(r["source_id"], 0))
+    return ordered[:limit]
 
 
 def run_deepen(store: MarketStore, cassette: Cassette, *, offline: bool,
