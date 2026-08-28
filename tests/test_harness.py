@@ -145,6 +145,21 @@ class TestCassette:
         assert cassette.keys("cex") == ["c"]
         assert len(cassette) == 3
 
+    def test_root_honours_PHONELOOP_FIXTURES_only_when_root_is_omitted(
+        self, tmp_path, monkeypatch
+    ):
+        """Cassette() with no argument consults PHONELOOP_FIXTURES; a caller
+        that pins an explicit root -- every existing caller -- keeps working
+        identically whether or not the var is set, per the build contract
+        (s6's category-tree recorder passes its root positionally today and
+        must not change behaviour once this lands)."""
+        monkeypatch.setenv(harness.FIXTURES_ENV, str(tmp_path))
+        assert Cassette().root == tmp_path
+
+        explicit = tmp_path / "elsewhere"
+        assert Cassette(explicit).root == explicit
+        assert Cassette(str(explicit)).root == explicit
+
 
 class TestReplay:
     def test_it_returns_the_recorded_response(self, tmp_path):

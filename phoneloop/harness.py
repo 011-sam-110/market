@@ -53,6 +53,25 @@ _MODES = (REPLAY, RECORD, LIVE)
 
 DEFAULT_ROOT = Path(__file__).resolve().parent.parent / "fixtures"
 
+# Where a stream's recordings live when they should not touch the repo's own
+# fixtures/ directory -- the eBay niche finder build records into
+# ~/.phoneloop/fixtures, well outside the repo and outside OneDrive, the same
+# reason DATA_DIR moved (see phoneloop/config.py). Set with PHONELOOP_FIXTURES;
+# unset keeps every existing caller pointed at DEFAULT_ROOT exactly as before.
+FIXTURES_ENV = "PHONELOOP_FIXTURES"
+
+
+def fixtures_root(env: dict[str, str] | None = None) -> Path:
+    """Where recordings live: PHONELOOP_FIXTURES when set, else DEFAULT_ROOT.
+
+    Only Cassette.__init__ (when its `root` argument is omitted) consults this.
+    Nothing else in the codebase re-implements the lookup, so there is exactly
+    one place that decides what "unset" means.
+    """
+    e = env if env is not None else os.environ
+    value = e.get(FIXTURES_ENV)
+    return Path(value) if value else DEFAULT_ROOT
+
 # Anything matching these never reaches a fixture file. The proxy URL carries a
 # password, and requests puts it verbatim into ProxyError text; Vinted's cookies
 # are a live session. Neither is needed to replay a response, and a fixture is a
@@ -189,8 +208,14 @@ class Cassette:
     trimming is how a fixture stops being evidence.
     """
 
-    def __init__(self, root: Path | str = DEFAULT_ROOT):
-        self.root = Path(root)
+    def __init__(self, root: Path | str | None = None):
+        """root=None consults PHONELOOP_FIXTURES, then falls back to DEFAULT_ROOT.
+
+        An explicit root (Path or str) is used verbatim and never looks at the
+        environment -- so a caller pinning a specific cassette directory keeps
+        working exactly as before, env var or not.
+        """
+        self.root = Path(root) if root is not None else fixtures_root()
 
     def path_for(self, kind: str, key: str) -> Path:
         return self.root / kind / f"{key}.json.gz"

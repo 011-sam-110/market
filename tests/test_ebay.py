@@ -8,17 +8,26 @@ fixture claimed to be real and was invented.
 
 from __future__ import annotations
 
+import json
+from datetime import date
+
 import pytest
 
+import phoneloop.market_store as market_store
 from phoneloop.ebay import (
+    DECOY_ITEM_IDS,
     EbayListing,
+    expand_abbreviated_count,
+    is_decoy,
     looks_geolocated_abroad,
+    pct_to_bp,
     uk_share,
     parse_row,
     parse_rows,
     retail_ceiling,
     saturation,
     to_pence,
+    to_row,
 )
 
 # --- verbatim rows ----------------------------------------------------------
@@ -76,6 +85,55 @@ Pre-owned · Apple iPhone 13 · Unlocked · 128 GB
 Free international postage
 from Germany
 3 watchers"""
+
+# --- rows recorded through scripts/record_ebay.py, live, 2026-08-27 --------
+#
+# The fixtures above predate this build; everything below was captured for it
+# and lives on disk (gzipped) under PHONELOOP_FIXTURES as
+# cassette "ebay" / key "search-iphone-13-128gb-p1-...". These six are copied
+# out verbatim rather than read through the harness in every test, the same
+# way the fixtures above are: no test here should depend on the fixtures
+# directory being present, and the values are pinned so a change shows up as
+# a diff instead of a different day's search results.
+
+SOLD_AND_PROMOTED_ROW = "Apple iPhone 13 128GB/256/512 - ALL COLOURS - UNLOCKED - GOOD CONDITION\nOpens in a new window or tab\n12 Months Warranty - Fast & Free Delivery - Unlocked\nGood - Refurbished\n4.5 out of 5 stars.\n76 product ratings\n- Apple iPhone 13 128GB/256/512 - ALL COLOURS - UNLOCKED - GOOD CONDITION\n£209.99£779.99(£209.99/Unit)\nBuy It Now\n+£30.00 delivery\n552+ sold\nthe_ioutlet_extra 99.9% positive (76.5K)\nRefurbished\nderosnopS"
+SOLD_AND_PROMOTED_ROW_URL = "https://www.ebay.co.uk/itm/225236871939?_skw=iphone+13+128gb&epid=12049274306&itmmeta=01M12MQ4NJYKAQQ4FHQX5CMP67&hash=item347129eb03:g:eSUAAOSwVrljZS8p"
+
+ALMOST_GONE_ROW = "Apple iPhone 13 / 128GB /Midnight Color/Unlocked Excellent Condition ✅ A++ Grade\nOpens in a new window or tab\nPre-owned · Apple iPhone 13 · Unlocked · 128 GB\n4.5 out of 5 stars.\n12 product ratings\n- Apple iPhone 13 / 128GB /Midnight Color/Unlocked Excellent Condition ✅ A++ Grade\n£189.99\nBuy It Now\n+ £17.52 postage estimate\nAlmost gone\n76 sold\nCustoms services and international tracking provided\nsands-phones 99.8% positive (1K)\nderosnopS"
+ALMOST_GONE_ROW_URL = "https://www.ebay.co.uk/itm/406124792115?_skw=iphone+13+128gb&epid=8050688139&itmmeta=01M12MQ4NJ3HAKCRGBJV4WKYR7&hash=item5e8eec8933:g:6SEAAOSwciFnfYaD"
+
+LAST_ONE_ROW = "NEW LOW PRICE\nApple iPhone 13 128GB Blue Unlocked\nOpens in a new window or tab\nPre-owned · Apple iPhone 13 · Unlocked · 128 GB\n4.5 out of 5 stars.\n76 product ratings\n- Apple iPhone 13 128GB Blue Unlocked\n£198.30\nor Best Offer\n+£20.00 delivery\nLast one\n5 watchers\nkeaah0 100% positive (8)\nderosnopS"
+LAST_ONE_ROW_URL = "https://www.ebay.co.uk/itm/128015361583?_skw=iphone+13+128gb&epid=12049274306&itmmeta=01M12MQ4NMXCND8FFM68F0EW9N&hash=item1dce4f662f:g:Ri8AAeSwCQJqdcFA"
+
+ZERO_FEEDBACK_ROW = "Apple iPhone 13 128GB White Unlocked 5.4in iOS 12MP 5G Smartphone\nOpens in a new window or tab\nPre-owned · Apple iPhone 13 · Unlocked · 128 GB\n5.0 out of 5 stars.\n2 product ratings\n- Apple iPhone 13 128GB White Unlocked 5.4in iOS 12MP 5G Smartphone\n£200.38\nor Best Offer\n+£4.50 delivery\nreshi-1723 0% positive (0)\nderosnopS"
+ZERO_FEEDBACK_ROW_URL = "https://www.ebay.co.uk/itm/137649672983?_skw=iphone+13+128gb&epid=6052543130&itmmeta=01M12MQ4NNAG37PWQDNTDX68DA&hash=item200c8f5317:g:xnAAAeSwmX1qiao1"
+
+# China is the second most common ships_from on the 528 real rows (27, after
+# United States' 49) -- a real "from China" row, for the origin_country
+# mapping guard below.
+CHINA_ORIGIN_ROW = "IPhone 11 6.1'' GSM CDMA 64GB/128GB/256GB 12MP Mobile Phone Unlocked\nOpens in a new window or tab\nPre-owned\n5.0 out of 5 stars.\n4 product ratings\n- IPhone 11 6.1'' GSM CDMA 64GB/128GB/256GB 12MP Mobile Phone Unlocked\n£165.00 to £210.00(£165.00/Unit)\nBuy It Now\n+£9.99 delivery\nfrom China\ndollmascot 98.8% positive (1.7K)\nderosnopS"
+CHINA_ORIGIN_ROW_URL = "https://www.ebay.co.uk/itm/126637082291?_skw=iphone+13+128gb&epid=11034720500&itmmeta=01M12NBZRZPMW5XNF4RDZ1EV0F&hash=item1d7c2886b3:g:z0EAAOSwjQ5mxiHG"
+
+# The percentage-then-count ordering is the contract's documented shape (409
+# of 528 real rows, measured); this one carries the reverse ordering, seen on
+# 65 of the same 528.
+ALT_SELLER_ORDER_ROW = "Redmi\nREDMI 10 Power 128 GB 8 GB RAM Orange-Factory Unlocked Phone-NO TARIFF TO USA\nOpens in a new window or tab\nBrand new\n£114.75\nLast one\none.stop.shoppee (3,503) 98.6%\n+£25.51 delivery\nderosnopS"
+ALT_SELLER_ORDER_ROW_URL = "https://www.ebay.co.uk/itm/177815541337?_skw=iphone+13+128gb&itmmeta=01M12MQ4PVC9YK3R81ZD0QQ3BW&hash=item2966a1d659:g:C8IAAeSwJjtpJXa-"
+
+# A "people also viewed"-style row with no seller line at all -- a real
+# absence (54 of 528 real rows), not a parse failure.
+NO_SELLER_LINE_ROW = "Apple iPhone 13 128GB 256GB 512GB Unlocked Refurb Smartphone Excellent Condition\nOpens in a new window or tab\nExcellent - Refurbished\n£309.89\n+ £21.66 postage estimate\nRefurbished\nderosnopS"
+NO_SELLER_LINE_ROW_URL = "https://www.ebay.co.uk/itm/389156180455?_skw=iphone+13+128gb&epid=15049284953&itmmeta=01M12MQ4PVXWCMWPDWYZ3QMZGD&hash=item5a9b8411e7:g:aRUAAOSwDMJnZZ4N"
+
+# --- rows recorded 2026-08-28, garden category (sacat 139956) ---------------
+# Both carry the word NEW at the front and only ONE of them is a badge. They
+# are here together deliberately: they are the pair that decides whether the
+# strip is written as "NEW LISTING" exactly or as a looser leading-NEW rule.
+# See TestTitleIsNotABadge for the measurement behind that choice.
+NEW_LISTING_ROW = "NEW LISTINGzacurter Garden Tool Storage Rack Wall Mounted Shed Storage Solutions Garage\nOpens in a new window or tab\nBrand new\n£24.00\nBuy It Now\nFree delivery in 3 days\nGet it by Wed 2 Sep\nFree returns\nedodean_67 98.8% positive (80)\nderosnopS"
+NEW_LISTING_ROW_URL = "https://www.ebay.co.uk/itm/377452038288?itmmeta=01M1411P8BNN8GYD8AHX86ZQJP&hash=item57e1e50890:g:FzQAAeSwRUZqkK8v"
+
+NEW_IS_PART_OF_THE_TITLE_ROW = "NEW Genuine Toomax Storaway Spare Replacement Parts\nOpens in a new window or tab\nBrand new\n£3.99 to £19.99\nBuy It Now\n+£2.99 delivery\ncharmainesellsitall 99.8% positive (10.7K)\nderosnopS"
 
 
 class TestMoney:
@@ -392,3 +450,356 @@ class TestShipsFromIsNotAPriceLine:
         assert listing is not None
         assert listing.ships_from == "Germany"
         assert listing.is_uk is False
+
+
+class TestDecoy:
+    """eBay's search results page renders a hidden template <li> ahead of the
+    real rows, pointing at /itm/123456 -- nothing in ITS TEXT marks it as a
+    decoy (it parses like a perfectly good row), only the item id does. None
+    of the 528 real rows this build recorded (2026-08-27) were a decoy: the
+    JS extraction those rows came through already requires an /itm/ href with
+    real digits, so a genuine decoy row was never itself captured. This pairs
+    a real row's own text with the documented decoy id (build contract §2.4)
+    to prove the id alone is what triggers the drop, regardless of content.
+    """
+
+    def test_the_hidden_template_row_is_dropped(self):
+        assert parse_row(SOLD_AND_PROMOTED_ROW,
+                          "https://www.ebay.co.uk/itm/123456?_skw=x") is None
+
+    def test_is_decoy_reads_the_item_id_not_the_whole_url(self):
+        assert is_decoy("https://www.ebay.co.uk/itm/123456") is True
+        assert is_decoy("https://www.ebay.co.uk/itm/123456?foo=bar") is True
+        assert is_decoy("https://www.ebay.co.uk/itm/225236871939") is False
+        assert is_decoy("") is False
+        assert "123456" in DECOY_ITEM_IDS
+
+
+class TestSoldCount:
+    def test_a_plus_suffixed_count_drops_the_plus_keeps_the_digits(self):
+        row = parse_row(SOLD_AND_PROMOTED_ROW, SOLD_AND_PROMOTED_ROW_URL)
+        assert row.sold_qty == 552
+
+    def test_a_row_with_no_sold_count_is_none_not_zero(self):
+        row = parse_row(UK_USED)
+        assert row.sold_qty is None
+
+
+class TestSellerLine:
+    """Two orderings were measured live across the 528 rows this build
+    recorded, 2026-08-27: "name pct% positive (n)" -- the build contract's
+    documented shape -- on 409 of them, and "name (n) pct%" on 65. The
+    remaining 54 carry no seller line at all."""
+
+    def test_the_documented_ordering(self):
+        row = parse_row(SOLD_AND_PROMOTED_ROW, SOLD_AND_PROMOTED_ROW_URL)
+        assert row.seller_id == "the_ioutlet_extra"
+        assert row.seller_feedback_bp == 9990
+        assert row.seller_feedback_n == 76500
+
+    def test_zero_percent_positive_is_a_real_zero_not_unknown(self):
+        row = parse_row(ZERO_FEEDBACK_ROW, ZERO_FEEDBACK_ROW_URL)
+        assert row.seller_id == "reshi-1723"
+        assert row.seller_feedback_bp == 0
+        assert row.seller_feedback_n == 0
+
+    def test_the_reversed_ordering(self):
+        row = parse_row(ALT_SELLER_ORDER_ROW, ALT_SELLER_ORDER_ROW_URL)
+        assert row.seller_id == "one.stop.shoppee"
+        assert row.seller_feedback_bp == 9860
+        assert row.seller_feedback_n == 3503
+
+    def test_no_seller_line_is_empty_not_a_crash(self):
+        row = parse_row(NO_SELLER_LINE_ROW, NO_SELLER_LINE_ROW_URL)
+        assert row is not None
+        assert row.seller_id == ""
+        assert row.seller_feedback_bp is None
+        assert row.seller_feedback_n is None
+
+
+class TestAbbreviatedCounts:
+    def test_k_expansion(self):
+        assert expand_abbreviated_count("74.6K") == 74600
+        assert expand_abbreviated_count("1K") == 1000
+
+    def test_m_expansion(self):
+        assert expand_abbreviated_count("13.9M") == 13_900_000
+
+    def test_a_plain_comma_count_needs_no_abbreviation(self):
+        assert expand_abbreviated_count("3,503") == 3503
+
+    def test_percent_to_basis_points(self):
+        assert pct_to_bp("99.8") == 9980
+        assert pct_to_bp("100") == 10000
+        assert pct_to_bp("0") == 0
+
+
+class TestPromoted:
+    """eBay renders "Sponsored" reversed ("derosnopS") so it cannot be
+    selected as page text, but it is still there in the DOM's innerText."""
+
+    def test_the_reversed_marker_is_read(self):
+        assert parse_row(SOLD_AND_PROMOTED_ROW, SOLD_AND_PROMOTED_ROW_URL).promoted is True
+
+    def test_a_promoted_row_is_kept_not_dropped(self):
+        row = parse_row(SOLD_AND_PROMOTED_ROW, SOLD_AND_PROMOTED_ROW_URL)
+        assert row is not None
+        assert row.price_pence == 20999
+
+    def test_a_row_without_the_marker_is_not_promoted(self):
+        """Every one of the 528 real rows this build captured, 2026-08-27,
+        carried the marker (see the module docstring in phoneloop/ebay.py) --
+        so the promoted=False case is the pre-existing fixtures above,
+        captured the same day without it."""
+        assert parse_row(UK_USED).promoted is False
+        assert parse_row(UK_WATCHED).promoted is False
+
+
+class TestTitleIsNotABadge:
+    """The first line of a row is not reliably the title.
+
+    Measured over all 31,649 rows of the complete 43-hub sweep (2026-08-28):
+    837 carry something ahead of the title, and the something is not
+    enumerable -- promo badges (NEW LOW PRICE 566, GREAT PRICE 93, "20% OFF",
+    "56% OFF") sit alongside bare brand labels (Google, Huawei, Motorola,
+    Xiaomi, Redmi, Samsung, Apple, DOOGEE, PDKUAI, FDGAO). A blocklist of
+    badge words would have to enumerate every brand eBay sells.
+
+    "Opens in a new window or tab" is on 100% of those 31,649 rows, across all
+    43 categories -- it is the accessibility suffix of the same anchor element
+    whose text is the title -- so the title is the line immediately before it.
+
+    That anchor does not catch the second shape: NEW LISTING is glued onto the
+    title with no separator at all (981 rows). Its prefix set was measured,
+    not guessed, by taking the rows where eBay ALSO repeats the title as
+    "- <title>" and reading off what sits in front of the repeat; across 2,367
+    such rows the only glued prefix is "NEW LISTING" (115). A bare leading
+    "NEW " must NOT be stripped -- "NEW Genuine Toomax Storaway Spare
+    Replacement Parts" is a real seller title, and on iPhone rows the leading
+    NEW is the English rendering of a German listing's "NEU".
+
+    Applied to the whole corpus the rule corrects 1,818 titles (5.7%) and
+    empties none.
+    """
+
+    def test_a_promo_badge_on_its_own_line_is_not_the_title(self):
+        row = parse_row(LAST_ONE_ROW, LAST_ONE_ROW_URL)
+        assert row.title == "Apple iPhone 13 128GB Blue Unlocked"
+
+    def test_a_brand_label_on_its_own_line_is_not_the_title(self):
+        """The 142 prefixed rows are brands as often as badges."""
+        row = parse_row(ALT_SELLER_ORDER_ROW, ALT_SELLER_ORDER_ROW_URL)
+        assert row.title == (
+            "REDMI 10 Power 128 GB 8 GB RAM Orange-Factory Unlocked Phone-NO TARIFF TO USA"
+        )
+
+    def test_a_glued_new_listing_badge_is_stripped(self):
+        row = parse_row(NEW_LISTING_ROW, NEW_LISTING_ROW_URL)
+        assert row.title == (
+            "zacurter Garden Tool Storage Rack Wall Mounted Shed Storage Solutions Garage"
+        )
+
+    def test_a_seller_title_beginning_new_is_left_alone(self):
+        """Guards the over-strip: "NEW " here is the seller's own word."""
+        assert parse_row(NEW_IS_PART_OF_THE_TITLE_ROW).title == (
+            "NEW Genuine Toomax Storaway Spare Replacement Parts"
+        )
+
+    def test_an_unprefixed_row_is_unchanged(self):
+        assert parse_row(UK_USED).title.startswith("Apple iPhone 13 128GB White")
+
+
+class TestStockHint:
+    def test_almost_gone(self):
+        assert parse_row(ALMOST_GONE_ROW, ALMOST_GONE_ROW_URL).stock_hint == "Almost gone"
+
+    def test_last_one(self):
+        assert parse_row(LAST_ONE_ROW, LAST_ONE_ROW_URL).stock_hint == "Last one"
+
+    def test_no_hint_is_an_empty_string(self):
+        assert parse_row(UK_USED).stock_hint == ""
+
+
+class TestWatchersWithAPlus:
+    def test_a_plus_suffixed_watcher_count_is_read(self):
+        """"48+ watchers" (measured live, 2026-08-27) read as 0 watchers
+        before this fix: the original pattern required whitespace
+        immediately after the digits, and did not expect a "+"."""
+        assert parse_row("x\n£10.00\n48+ watchers").watchers == 48
+
+
+class TestFreeDeliveryBannerIsNotAChargeLine:
+    """A live listing template (the_ioutlet_extra's, measured 2026-08-27, 11
+    of the 528 real rows this build recorded) opens with a marketing banner
+    -- "12 Months Warranty - Fast & Free Delivery - Unlocked" -- ahead of a
+    REAL "+£30.00 delivery" charge three lines later. Matching "free" anywhere
+    in the row (the pre-existing behaviour) found the banner first and booked
+    the charge as 0 on all 11; a genuine free-delivery statement always opens
+    its own line, so the fix anchors the match to the start of a line.
+    """
+
+    def test_the_banner_does_not_shadow_the_real_charge(self):
+        row = parse_row(SOLD_AND_PROMOTED_ROW, SOLD_AND_PROMOTED_ROW_URL)
+        assert row.delivery_pence == 3000
+        assert row.landed_pence == 23999
+
+    def test_a_genuine_free_postage_line_is_still_zero(self):
+        assert parse_row(FREE_POST).delivery_pence == 0
+
+
+# None of the 528 real rows this build captured, 2026-08-27, carried a
+# delivery-ETA line at all -- eBay did not show one anywhere on this sweep.
+# These four rows are hand-typed against the three ETA phrasings the design
+# spec and build contract document verbatim (contract §2.4), not lifted from
+# a page recording -- named SYNTHETIC_* per the standing rule; see
+# unverified[] in the build report.
+SYNTHETIC_ETA_IN_N_DAYS_ROW = "x\n£10.00\nFree delivery in 3 days"
+SYNTHETIC_ETA_HYPHEN_RANGE_ROW = "x\n£10.00\nEstimated delivery 3-5 days"
+SYNTHETIC_ETA_EN_DASH_RANGE_ROW = "x\n£10.00\nEstimated delivery 3–5 days"
+SYNTHETIC_ETA_GET_IT_BY_ROW = "x\n£10.00\nGet it by Tue 1 Sep"
+SYNTHETIC_ETA_GET_IT_BY_NEW_YEAR_ROW = "x\n£10.00\nGet it by Thu 1 Jan"
+
+
+class TestEta:
+    """None of the 528 real rows this build captured, 2026-08-27, carried a
+    delivery-ETA line at all -- eBay did not show one anywhere on this sweep.
+    These exercise the parser directly against the three phrasings the
+    design spec and build contract document verbatim (contract §2.4), not
+    against a page recording; see unverified[] in the build report."""
+
+    def test_synthetic_in_n_days(self):
+        assert parse_row(SYNTHETIC_ETA_IN_N_DAYS_ROW).eta_days == 3
+
+    def test_synthetic_a_hyphen_range_takes_the_maximum(self):
+        assert parse_row(SYNTHETIC_ETA_HYPHEN_RANGE_ROW).eta_days == 5
+
+    def test_synthetic_an_en_dash_range_also_works(self):
+        assert parse_row(SYNTHETIC_ETA_EN_DASH_RANGE_ROW).eta_days == 5
+
+    def test_synthetic_get_it_by_with_no_reference_date_is_none(self):
+        """parse_row must not read the clock itself."""
+        assert parse_row(SYNTHETIC_ETA_GET_IT_BY_ROW).eta_days is None
+
+    def test_synthetic_get_it_by_with_a_reference_date(self):
+        row = parse_row(SYNTHETIC_ETA_GET_IT_BY_ROW, today=date(2026, 8, 27))
+        assert row.eta_days == 5
+
+    def test_synthetic_get_it_by_rolls_into_next_year(self):
+        """1 Jan relative to a late-December "today" is next year, not a
+        negative day count."""
+        row = parse_row(SYNTHETIC_ETA_GET_IT_BY_NEW_YEAR_ROW, today=date(2026, 12, 28))
+        assert row.eta_days == 4
+
+    def test_no_eta_line_is_none(self):
+        assert parse_row(UK_USED).eta_days is None
+
+
+class TestParseRowsPassesTodayThrough:
+    def test_synthetic_today_reaches_every_row(self):
+        rows = [{"text": SYNTHETIC_ETA_GET_IT_BY_ROW}]
+        listings = parse_rows(rows, today=date(2026, 8, 27))
+        assert listings[0].eta_days == 5
+
+
+class TestToRow:
+    """`to_row` is built from market_store.empty_row() (build contract §2.4).
+
+    build/s1_store_fees -- the sibling branch that defines the real
+    ROW_FIELDS / empty_row() -- lands before s2 only at integration (contract
+    §6.1); this worktree builds in parallel with it and does not merge it.
+    So this monkeypatches phoneloop.market_store with a literal reproduction
+    of the contract's §1.1 column list, verifying to_row's OWN mapping logic
+    now. The real cross-check against s1's actual empty_row() is
+    integration's job, not this stream's.
+    """
+
+    # Build contract §1.1, the 37 columns, in schema order.
+    ROW_FIELDS = (
+        "source", "source_id", "seen_at", "category", "shard", "title",
+        "price_pence", "total_pence", "currency", "condition", "brand",
+        "model", "storage_gb", "grade", "kind", "available", "region",
+        "seller_id", "url", "extra", "content_hash",
+        "sold_qty", "qty_available", "seller_type", "seller_feedback_bp",
+        "seller_feedback_n", "listed_at", "epid", "gtin", "mpn",
+        "identity_tier", "origin_country", "promoted", "leaf_category_id",
+        "eta_days", "store_joined", "store_items_sold",
+    )
+
+    @staticmethod
+    def _empty_row(source, source_id):
+        row = {name: None for name in TestToRow.ROW_FIELDS}
+        row["source"] = source
+        row["source_id"] = str(source_id)
+        return row
+
+    @pytest.fixture(autouse=True)
+    def _stub_market_store(self, monkeypatch):
+        monkeypatch.setattr(market_store, "empty_row", self._empty_row, raising=False)
+        monkeypatch.setattr(market_store, "ROW_FIELDS", self.ROW_FIELDS, raising=False)
+
+    def test_the_output_has_exactly_the_row_fields_keys(self):
+        listing = parse_row(SOLD_AND_PROMOTED_ROW, SOLD_AND_PROMOTED_ROW_URL)
+        row = to_row(listing, category="phones", shard="iphone-13-128gb/p1")
+        assert set(row) == set(self.ROW_FIELDS)
+
+    def test_a_real_row_maps_onto_the_right_columns(self):
+        listing = parse_row(SOLD_AND_PROMOTED_ROW, SOLD_AND_PROMOTED_ROW_URL)
+        row = to_row(listing, category="phones", shard="s", leaf_category_id="9355")
+        assert row["source"] == "ebay"
+        assert row["source_id"] == "225236871939"
+        assert row["price_pence"] == 20999
+        assert row["total_pence"] == 23999
+        assert row["currency"] == "GBP"
+        assert row["kind"] == "ask"
+        assert row["available"] is True
+        assert row["sold_qty"] == 552
+        assert row["seller_id"] == "the_ioutlet_extra"
+        assert row["seller_feedback_bp"] == 9990
+        assert row["seller_feedback_n"] == 76500
+        assert row["promoted"] is True
+        assert row["epid"] == "12049274306"
+        assert row["identity_tier"] == "catalogued"
+        assert row["leaf_category_id"] == "9355"
+        assert row["origin_country"] == "GB"
+        assert row["region"] == "GB"
+
+    def test_the_url_has_its_query_string_stripped(self):
+        listing = parse_row(SOLD_AND_PROMOTED_ROW, SOLD_AND_PROMOTED_ROW_URL)
+        row = to_row(listing, category="phones", shard="s")
+        assert row["url"] == "https://www.ebay.co.uk/itm/225236871939"
+
+    def test_stock_hint_rides_in_extra_it_is_not_a_column(self):
+        listing = parse_row(ALMOST_GONE_ROW, ALMOST_GONE_ROW_URL)
+        row = to_row(listing, category="phones", shard="s")
+        assert "stock_hint" not in row
+        assert json.loads(row["extra"])["stock_hint"] == "Almost gone"
+
+    def test_an_overseas_listing_is_not_gb(self):
+        listing = parse_row(OVERSEAS)
+        row = to_row(listing, category="phones", shard="s")
+        assert row["region"] is None
+        assert row["origin_country"] == "US"
+
+    def test_a_china_origin_listing_maps_to_cn(self):
+        """China is the second most common origin on the real recorded
+        pages (27 of 528 rows) -- the column exists precisely so a
+        China-sourced dropshipper can see China-shipped competitors (build
+        contract §1.1, col 32), so this name must never silently return
+        None."""
+        listing = parse_row(CHINA_ORIGIN_ROW, CHINA_ORIGIN_ROW_URL)
+        row = to_row(listing, category="phones", shard="s")
+        assert row["origin_country"] == "CN"
+
+    def test_a_row_with_no_epid_has_no_identity_tier(self):
+        listing = parse_row(UK_USED)
+        row = to_row(listing, category="phones", shard="s")
+        assert row["epid"] is None
+        assert row["identity_tier"] is None
+
+    def test_leaf_category_id_is_a_caller_supplied_passthrough(self):
+        """The row parser never sees a category id -- it comes from the
+        sweep's own shard, not from anything on the page."""
+        listing = parse_row(UK_USED)
+        assert to_row(listing, category="phones", shard="s")["leaf_category_id"] is None
+        assert to_row(listing, category="phones", shard="s",
+                      leaf_category_id="139971")["leaf_category_id"] == "139971"
