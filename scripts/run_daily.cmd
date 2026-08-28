@@ -31,11 +31,20 @@ REM tomorrow's 03:00 trigger -- and it picks up where it left off rather
 REM than redoing completed work.
 REM
 REM ASSUMED CLI, checked at integration (2026-08-28):
-REM   --leaf-sweep     is s2's own flag, confirmed by running the offline
-REM                     end-to-end command in contracts section 6.3
-REM                     ("bulk_ebay.py --leaf-sweep --max-pages 3 --fresh")
-REM                     against the merged tree. It exists and takes the
-REM                     shape this file assumes.
+REM   --leaf-sweep     is s2's own flag; argparse accepts it and it takes the
+REM                     shape this file assumes. The section 6.3 offline
+REM                     end-to-end run ("bulk_ebay.py --leaf-sweep
+REM                     --max-pages 3 --fresh") does NOT get past its first
+REM                     shard against the merged tree: scripts/record_ebay.py
+REM                     records keyword search pages (_ipg=60, no price
+REM                     band), while --leaf-sweep fetches a different URL
+REM                     shape (_sacat=, _ipg=240, a price band) under a
+REM                     different cassette key, so no recording satisfies the
+REM                     first shard and it raises MissingRecording -- correct
+REM                     per contracts section 6.3 ("a missing recording
+REM                     raises rather than producing an empty board"), but it
+REM                     means this flag is unverified end to end offline.
+REM                     See the integration report's unverified[].
 REM   --deepen          CONFIRMED NOT TO EXIST: `bulk_ebay.py --deepen`
 REM                     fails argparse ("unrecognized arguments: --deepen").
 REM                     No accepted stream wired a Tier-2 driver -- s2 owns

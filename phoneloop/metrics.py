@@ -371,13 +371,20 @@ def check(m: Metrics, knobs: Knobs, *,
     ))
 
     # 2 -- sell-through. str_lifetime is NEVER compared to the threshold,
-    # however good it looks -- see the module docstring, rule 2.
+    # however good it looks -- see the module docstring, rule 2. The
+    # denominator/coverage here MUST be str_lifetime_denominator (== the
+    # sold_known count str_lifetime was actually averaged over), not
+    # str_window_denominator -- that field is 0 whenever there is no second
+    # snapshot (the exact branch this `if` is on), which printed a real
+    # figure sitting on a reported denominator of 0 / 0% coverage
+    # (integration bug, fixed here: found while wiring the board's offline
+    # end-to-end run).
     if m.str_window_bp is None:
         results.append(KnobResult(
             knob="sell_through", value=m.str_lifetime, threshold=knobs.str_threshold_bp,
             passed=None,
-            denominator=m.str_window_denominator,
-            coverage=_coverage(m.str_window_denominator, m.n_listings),
+            denominator=m.str_lifetime_denominator,
+            coverage=_coverage(m.str_lifetime_denominator, m.n_listings),
             note="lifetime figure only (no second snapshot yet) - not "
                  "comparable to the window threshold",
         ))

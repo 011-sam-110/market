@@ -366,6 +366,15 @@ class TestCheck:
         assert sell_through.passed is None
         assert "lifetime" in sell_through.note
         assert "not comparable" in sell_through.note or "window" in sell_through.note
+        # Guard for the integration bug found wiring the board's offline
+        # end-to-end run: both rows have a known sold_qty, so the lifetime
+        # figure's OWN denominator (str_lifetime_denominator) is 2 out of
+        # 2 -- full coverage -- even though str_window_denominator (a
+        # different count, for a window that does not exist here) is 0.
+        # check() must report the denominator the printed VALUE was
+        # actually computed over, not the unrelated windowed one.
+        assert sell_through.denominator == m.str_lifetime_denominator == 2
+        assert sell_through.coverage == pytest.approx(1.0)
 
     def test_sell_through_passes_when_the_window_figure_clears_the_threshold(self):
         rows = [_row(source_id="1"), _row(source_id="2")]

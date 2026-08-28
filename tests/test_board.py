@@ -13,12 +13,20 @@ from datetime import UTC, date, datetime
 
 import pytest
 
-from phoneloop import board, fees
+from phoneloop import board, catalog_ebay, fees
 from phoneloop.knobs import Knobs
 from phoneloop.market_store import MarketStore, empty_row
 from phoneloop.snapshots import difference
 
-LEAF_GOOD = "139971"     # in-band price, good feedback, fast delivery
+# LEAF_GOOD is a REAL in-scope leaf (ebay_categories.json: "Mobile Phones &
+# Smartphones", under department "Mobile Phones & Communication", id 15032)
+# on purpose, not an arbitrary string. fees.FVF_BP_BY_TOP_LEVEL_NAME rates
+# that department at 990bp, which differs from EVERYTHING_ELSE_BP (1290bp) --
+# so a leaf id that only resolves through catalog_ebay.top_level_of() prices
+# differently than one that falls to the fallback. LEAF_BAD/LEAF_WIN stay
+# synthetic: nothing below exercises their fee rate, only their price/
+# feedback/delivery bands and their snapshot dates.
+LEAF_GOOD = "9355"        # in-band price, good feedback, fast delivery
 LEAF_BAD = "200000"      # out-of-band price, poor feedback, slow delivery
 LEAF_WIN = "300000"      # exists on two snapshot dates -> windowed STR
 
@@ -77,15 +85,42 @@ class TestRankNiches:
     def test_max_cost_comes_from_fees_not_reimplemented(self, two_niche_store, knobs):
         """board.py must not compute its own fee arithmetic -- cross-check
         every row's max_cost against a direct fees.max_cost() call on the
-        same price_floor/price_median it reports."""
+        same price_floor/price_median it reports, passed the SAME
+        top_level_of mapping board.py itself threads through (contracts
+        section 6.2, item 1) -- omitting it here would make this a
+        same-fallback-on-both-sides tautology rather than a real check, since
+        every leaf in this fixture would then price at EVERYTHING_ELSE_BP on
+        both sides regardless of whether board.py's own wiring is intact."""
+        top_level_of = catalog_ebay.top_level_of()
         rows = board.rank_niches(two_niche_store, knobs)
         for r in rows:
             if r.metrics.price_floor_pence is not None:
-                expected = fees.max_cost(r.metrics.price_floor_pence, r.key, knobs)
+                expected = fees.max_cost(r.metrics.price_floor_pence, r.key, knobs,
+                                         top_level_of=top_level_of)
                 assert r.max_cost_at_floor_pence == expected
             if r.metrics.price_median_pence is not None:
-                expected = fees.max_cost(r.metrics.price_median_pence, r.key, knobs)
+                expected = fees.max_cost(r.metrics.price_median_pence, r.key, knobs,
+                                         top_level_of=top_level_of)
                 assert r.max_cost_at_median_pence == expected
+
+    def test_max_cost_actually_uses_the_real_category_rate(self, two_niche_store, knobs):
+        """Guard for the integration wiring itself (contracts section 6.2,
+        item 1), not just internal consistency: LEAF_GOOD (real leaf 9355,
+        "Mobile Phones & Smartphones") must price at its department's 990bp
+        rate, NOT at EVERYTHING_ELSE_BP (1290bp) -- the fallback every leaf
+        gets when board.py fails to pass a populated top_level_of into
+        fees.max_cost. If board.py's `top_level_of = catalog_ebay.top_level_of()`
+        wiring is ever dropped (reverted to `top_level_of=None`), this row's
+        max_cost silently jumps to the fallback-rate figure and this test
+        catches that even though test_max_cost_comes_from_fees_not_reimplemented
+        above would not (that test recomputes its own expectation the same
+        wrong way board.py would, if board.py were wrong)."""
+        rows = board.rank_niches(two_niche_store, knobs)
+        good = next(r for r in rows if r.key == LEAF_GOOD)
+        assert good.metrics.price_floor_pence is not None
+        fallback_max_cost = fees.max_cost(good.metrics.price_floor_pence, LEAF_GOOD, knobs,
+                                          top_level_of=None)
+        assert good.max_cost_at_floor_pence != fallback_max_cost
 
     def test_limit_truncates(self, two_niche_store, knobs):
         rows = board.rank_niches(two_niche_store, knobs, limit=1)
