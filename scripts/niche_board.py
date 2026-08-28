@@ -15,14 +15,20 @@ per row; a row whose sell-through is `lifetime` (no second snapshot yet)
 says so and is never silently compared to the knob-2 threshold -- see
 phoneloop/metrics.py and phoneloop/board.py.
 
-NOTE for integration (contracts section 6.2, point 3): this script currently
-discovers its niche list from what the store actually observed
+Niches are still discovered from what the store actually observed
 (`board.rank_niches` groups by whatever `leaf_category_id` values are on the
-latest snapshot's rows) rather than from `catalog_ebay.IN_SCOPE`, because
-`phoneloop.catalog_ebay` (s6) is not merged into this stream's worktree. The
-integrator wiring note in the contracts is the place to point this at
-catalog_ebay's department list once it exists, if a curated (rather than
-observed) niche list turns out to matter.
+latest snapshot's rows) -- `rank_niches`'s contract signature (section 2.13)
+takes no scope argument, so this script cannot hand it a curated list without
+inventing an unspecified parameter. Instead (contracts section 6.2, point 3,
+wired at integration since `phoneloop.catalog_ebay`/s6 was not in this
+stream's worktree), the niche rows `rank_niches` returns are filtered here to
+`catalog_ebay`'s recorded leaves before display/HTML, over-fetching from
+`rank_niches` first so the filter cannot silently shrink below `--limit`. A
+row surviving this filter is provably one of the leaves
+`scripts/refresh_ebay_categories.py` actually recorded under an IN_SCOPE
+department -- a stray `leaf_category_id` from a parsing bug or a future
+non-scoped sweep is dropped here rather than boarded as if it were a real
+niche.
 """
 
 from __future__ import annotations
@@ -33,10 +39,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from phoneloop import board, config  # noqa: E402
+from phoneloop import board, catalog_ebay, config  # noqa: E402
 from phoneloop.knobs import Knobs  # noqa: E402
 from phoneloop.market_store import MarketStore  # noqa: E402
 from phoneloop.snapshots import difference  # noqa: E402
+
+# Over-fetch factor applied before the IN_SCOPE filter below, so filtering
+# out a few stray leaves cannot silently shrink the printed table below
+# --limit. Rank_niches is cheap (it groups rows already in memory), so this
+# costs nothing measurable.
+_OVERFETCH = 10
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -73,7 +85,10 @@ def main() -> int:
         print(f"only one snapshot date ({dates[-1]}) -- every sell-through "
              "figure below is 'lifetime', not 'window'")
 
-    niche_rows = board.rank_niches(store, knobs, difference=diff, limit=args.limit)
+    known_leaves = set(catalog_ebay.top_level_of().keys())
+    niche_rows = board.rank_niches(
+        store, knobs, difference=diff, limit=args.limit * _OVERFETCH)
+    niche_rows = [r for r in niche_rows if r.key in known_leaves][:args.limit]
     print()
     print("=== NICHES ===")
     print(board.render_table(niche_rows))

@@ -1,12 +1,26 @@
 """Rank eBay niches, then products within them, at the best identity tier
 each supports (design spec section 4 BOARD stage; contracts section 2.13).
 
-This module composes three other streams' work and reimplements none of it:
+This module composes four other streams' work and reimplements none of it:
 `market_store` for the rows, `metrics` for every figure and its denominator,
-`fees` for what a sale nets after eBay's cut, and `identity` for which
-listings are the same product. If a number needs recomputing here rather
-than being read straight off one of those four modules, that is a bug in
-this file, not a shortcut.
+`fees` for what a sale nets after eBay's cut, `identity` for which listings
+are the same product, and `catalog_ebay` for the leaf -> top-level-category
+mapping `fees.max_cost` needs to find the right rate. If a number needs
+recomputing here rather than being read straight off one of those five
+modules, that is a bug in this file, not a shortcut.
+
+**Integration wiring (contracts section 6.2, item 1):** `fees.fvf_bp` needs
+two things to resolve a real rate instead of falling to
+`EVERYTHING_ELSE_BP` -- `fees.TOP_LEVEL_ID_TO_NAME` (a module-level constant,
+filled in `fees.py` itself at integration) and a `leaf_category_id ->
+top_level_category_id` mapping, which is per-tree data and so is passed as
+an argument rather than baked into `fees.py`. This module is the caller that
+owns supplying it: `catalog_ebay.top_level_of()` is read once per
+`rank_niches`/`rank_products` call (not per row) and threaded through
+`_build_row` into every `fees.max_cost` call below. Before this wiring,
+`board.py` called `fees.max_cost` without it, so every board row's
+`max_cost` silently priced at the fallback rate regardless of
+`TOP_LEVEL_ID_TO_NAME` -- an integration bug, fixed here.
 
 **Niche = leaf_category_id.** ROW_FIELDS documents `leaf_category_id` as
 "the niche key, and the fee lookup key" (contracts section 1.1, column 34) --
@@ -35,7 +49,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from phoneloop import fees, identity
+from phoneloop import catalog_ebay, fees, identity
 from phoneloop import metrics as metrics_mod
 from phoneloop.knobs import Knobs
 from phoneloop.market_store import MarketStore
@@ -98,20 +112,24 @@ def _sort_key(row: BoardRow) -> tuple[float, int, int]:
 
 
 def _max_costs(price_floor_pence: int | None, price_median_pence: int | None,
-               leaf_category_id: str | None, knobs: Knobs) -> tuple[int | None, int | None]:
-    floor = (fees.max_cost(price_floor_pence, leaf_category_id, knobs)
+               leaf_category_id: str | None, knobs: Knobs,
+               top_level_of: dict[str, str] | None) -> tuple[int | None, int | None]:
+    floor = (fees.max_cost(price_floor_pence, leaf_category_id, knobs,
+                           top_level_of=top_level_of)
              if price_floor_pence is not None else None)
-    median = (fees.max_cost(price_median_pence, leaf_category_id, knobs)
+    median = (fees.max_cost(price_median_pence, leaf_category_id, knobs,
+                            top_level_of=top_level_of)
               if price_median_pence is not None else None)
     return floor, median
 
 
 def _build_row(*, key: str, label: str, level: str, identity_tier: str,
                rows: list[dict], knobs: Knobs, deltas, leaf_category_id: str | None,
-               competitors: int) -> BoardRow:
+               competitors: int, top_level_of: dict[str, str] | None) -> BoardRow:
     m = metrics_mod.compute(rows, deltas=deltas)
     max_floor, max_median = _max_costs(
-        m.price_floor_pence, m.price_median_pence, leaf_category_id, knobs)
+        m.price_floor_pence, m.price_median_pence, leaf_category_id, knobs,
+        top_level_of)
     knob_results = metrics_mod.check(
         m, knobs, competitors=competitors,
         max_cost_at_floor_pence=max_floor, max_cost_at_median_pence=max_median,
@@ -139,6 +157,7 @@ def rank_niches(store: MarketStore, knobs: Knobs, *,
     """
     rows = _latest_rows(store)
     deltas = _deltas_for_metrics(difference)
+    top_level_of = catalog_ebay.top_level_of()
 
     groups: dict[str, list[dict]] = {}
     for r in rows:
@@ -153,7 +172,7 @@ def rank_niches(store: MarketStore, knobs: Knobs, *,
         board_rows.append(_build_row(
             key=leaf, label=f"leaf:{leaf}", level="niche", identity_tier="none",
             rows=niche_rows, knobs=knobs, deltas=deltas, leaf_category_id=leaf,
-            competitors=len(seller_ids),
+            competitors=len(seller_ids), top_level_of=top_level_of,
         ))
 
     board_rows.sort(key=_sort_key, reverse=True)
@@ -171,6 +190,7 @@ def rank_products(store: MarketStore, knobs: Knobs,
     """
     rows = _latest_rows(store)
     deltas = _deltas_for_metrics(difference)
+    top_level_of = catalog_ebay.top_level_of()
     wanted = set(niches)
 
     by_leaf: dict[str, list[dict]] = {}
@@ -205,7 +225,7 @@ def rank_products(store: MarketStore, knobs: Knobs,
             board_rows.append(_build_row(
                 key=key, label=label, level="product", identity_tier=tier_of_key[key],
                 rows=prod_rows, knobs=knobs, deltas=deltas, leaf_category_id=leaf,
-                competitors=len(seller_ids),
+                competitors=len(seller_ids), top_level_of=top_level_of,
             ))
 
     board_rows.sort(key=_sort_key, reverse=True)

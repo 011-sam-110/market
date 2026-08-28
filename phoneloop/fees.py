@@ -31,20 +31,30 @@ unrecognised category is charged the *worst* rate on purpose: overstating
 eBay's cut understates `max_cost`, which is the safe direction (a supplier
 quote that clears an understated max_cost also clears the real one).
 
-**`TOP_LEVEL_ID_TO_NAME` ships empty.** Every id in it must have been read
-off a real eBay category page -- inventing one here would let a leaf resolve
-to a plausible-looking department that nobody actually confirmed, silently
-mispricing every product under it. No live category id was sourced by this
-stream; `phoneloop.catalog_ebay.top_level_of()` (a different stream) and the
-department ids it reads off a real page fill this dict at integration. Until
-then every leaf falls through to `EVERYTHING_ELSE_BP`, which is the safe
-direction described above.
+**`TOP_LEVEL_ID_TO_NAME` is filled at integration, from `catalog_ebay.IN_SCOPE`.**
+s1 shipped it empty on purpose (see above) because no live category id was
+sourced by this stream in isolation. At integration, `phoneloop.catalog_ebay`
+(s6) is merged and every id in its `IN_SCOPE` tuple was read off a real eBay
+category page (`scripts/refresh_ebay_categories.py`, run live 2026-08-27) --
+so this module imports that tuple and keys it by `category_id`. A department
+whose `category_id` is still `""` (none, currently) is skipped rather than
+entered, so it keeps falling to `EVERYTHING_ELSE_BP`. This import is one-way
+(`fees` -> `catalog_ebay`); `catalog_ebay` never imports `fees`, so there is
+no cycle. Note this still only fills the *id -> title* half of the lookup --
+`fvf_bp`'s caller must also pass the *leaf -> id* half via its `top_level_of`
+argument (`catalog_ebay.top_level_of()`); `board.py` does this at integration
+too, described in its own module docstring.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Protocol
+
+# Integration-only import: catalog_ebay (s6) did not exist in this stream's
+# worktree, so s1 could not fill TOP_LEVEL_ID_TO_NAME itself (see module
+# docstring). One-directional -- catalog_ebay.py has no import of fees.py.
+from phoneloop.catalog_ebay import IN_SCOPE as _IN_SCOPE_DEPARTMENTS
 
 # eBay's regulatory operating fee: 0.35%, quoted ex-VAT, charged on the same
 # base (price + postage) as the final value fee. Folded into the "variable"
@@ -93,9 +103,18 @@ FVF_BP_BY_TOP_LEVEL_NAME: dict[str, int] = {
     "Crafts": 1290,
 }
 
-# leaf's top-level category id -> department title. Empty by design; see the
-# module docstring. Filled at integration from catalog_ebay.top_level_of().
-TOP_LEVEL_ID_TO_NAME: dict[str, str] = {}
+# top-level category id -> department title, for the fee-rate lookup above.
+# Filled at integration (contracts section 6.2, item 1) from every IN_SCOPE
+# department whose category_id was actually read off a live page -- see the
+# module docstring. A department that ships with category_id == "" (none,
+# currently) is left out on purpose, same reasoning as an unsourced fee-table
+# row: falling to EVERYTHING_ELSE_BP is the safe direction, inventing an id
+# is not.
+TOP_LEVEL_ID_TO_NAME: dict[str, str] = {
+    dept.category_id: dept.title
+    for dept in _IN_SCOPE_DEPARTMENTS
+    if dept.category_id
+}
 
 
 class FeeKnobs(Protocol):

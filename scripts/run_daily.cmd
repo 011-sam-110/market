@@ -30,22 +30,24 @@ REM store, so a step that fails here can simply be re-run -- by hand, or by
 REM tomorrow's 03:00 trigger -- and it picks up where it left off rather
 REM than redoing completed work.
 REM
-REM ASSUMED CLI, unverified against streams not merged into this worktree:
-REM   --leaf-sweep     is s2's own flag, confirmed only by the offline
+REM ASSUMED CLI, checked at integration (2026-08-28):
+REM   --leaf-sweep     is s2's own flag, confirmed by running the offline
 REM                     end-to-end command in contracts section 6.3
-REM                     ("bulk_ebay.py --leaf-sweep --max-pages 3 --fresh").
-REM                     Used here WITHOUT --max-pages / --fresh, for a full
-REM                     unbounded daily sweep rather than the bounded smoke
-REM                     test that example runs.
-REM   --deepen          is NOT named anywhere in the build contracts for any
-REM                     stream (s2 owns ebay_item.py's item-page parser, s3
-REM                     owns ebay_api.py's getItem call, but neither
-REM                     contract names a script or flag that drives Tier 2
-REM                     end to end). This is this stream's best guess at
-REM                     the CLI s2/s3 will actually ship. If it does not
-REM                     exist at integration, the fix is to change ONE line
-REM                     below, not this file's structure.
-REM Both are named explicitly in this stream's unverified[].
+REM                     ("bulk_ebay.py --leaf-sweep --max-pages 3 --fresh")
+REM                     against the merged tree. It exists and takes the
+REM                     shape this file assumes.
+REM   --deepen          CONFIRMED NOT TO EXIST: `bulk_ebay.py --deepen`
+REM                     fails argparse ("unrecognized arguments: --deepen").
+REM                     No accepted stream wired a Tier-2 driver -- s2 owns
+REM                     ebay_item.py's item-page parser (parse_item,
+REM                     to_row_updates) and s3 (ebay_api.py's getItem call)
+REM                     was not accepted -- so there is nothing to point
+REM                     this at yet, and inventing a flag/script here would
+REM                     be new feature work, not an integration fix. The
+REM                     DEEPEN step below is skipped rather than left in to
+REM                     crash the 03:00 trigger every night; see the SKIP
+REM                     block's own comment. Re-enable it, one line, once a
+REM                     real Tier-2 driver ships.
 
 setlocal enabledelayedexpansion
 
@@ -64,21 +66,23 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [run_daily] %DATE% %TIME% -- [1/3] SWEEP
+echo [run_daily] %DATE% %TIME% -- [1/2] SWEEP
 "%PY%" scripts\bulk_ebay.py --leaf-sweep
 if errorlevel 1 (
     echo [run_daily] SWEEP failed -- checkpointed, safe to re-run
     exit /b 1
 )
 
-echo [run_daily] %DATE% %TIME% -- [2/3] DEEPEN
-"%PY%" scripts\bulk_ebay.py --deepen
-if errorlevel 1 (
-    echo [run_daily] DEEPEN failed -- checkpointed, safe to re-run
-    exit /b 1
-)
+REM DEEPEN (Tier 2, item-page enrichment) is skipped -- no accepted stream
+REM ships a script or flag that drives it end to end (see the comment block
+REM above). Skipping rather than calling a nonexistent `--deepen` keeps this
+REM trigger from failing every night over a step that cannot succeed either
+REM way; sweep + board still run daily on their own data. Restore a DEEPEN
+REM step here, renumbering back to [1/3]/[2/3]/[3/3], once ebay_item.py's
+REM parser (or ebay_api.py's, if s3 lands) is actually wired to a script.
+echo [run_daily] %DATE% %TIME% -- DEEPEN skipped: no Tier-2 driver script exists yet (see comment header)
 
-echo [run_daily] %DATE% %TIME% -- [3/3] BOARD (difference runs inside niche_board.py once 2+ snapshot dates exist)
+echo [run_daily] %DATE% %TIME% -- [2/2] BOARD (difference runs inside niche_board.py once 2+ snapshot dates exist)
 "%PY%" scripts\niche_board.py --products --html
 if errorlevel 1 (
     echo [run_daily] BOARD failed

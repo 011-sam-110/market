@@ -9,20 +9,19 @@ from __future__ import annotations
 
 import pytest
 
+from phoneloop.fees import FeeKnobs
 from phoneloop.knobs import Knobs
 
-# The five attribute names phoneloop.fees.FeeKnobs (contracts section 2.2)
-# reads. Knobs must not import fees (parallel worktrees), so this is a
-# literal duplicate of that Protocol's attribute list; the integrator wires
-# a real isinstance/attribute cross-check at merge time (contracts section
-# 6.2, item 2).
-_FEE_KNOBS_ATTRS = (
-    "vat_on_fees_bp",
-    "ad_rate_bp",
-    "import_vat_term_bp",
-    "min_margin_pct_bp",
-    "min_margin_fixed_pence",
-)
+# Wired at integration (contracts section 6.2, item 2): this used to be a
+# literal duplicate of phoneloop.fees.FeeKnobs's attribute list, because
+# knobs.py must not import fees.py (s1 and s4 build in parallel) and so
+# could not reference the real Protocol from its own tests. Now that both
+# streams are merged, the attribute list is read directly off
+# FeeKnobs.__annotations__ instead of being copied by hand -- if the
+# Protocol ever gains, loses, or renames an attribute, this test starts
+# checking the new list automatically rather than silently checking a
+# stale one.
+_FEE_KNOBS_ATTRS = tuple(FeeKnobs.__annotations__.keys())
 
 
 class TestDefaults:
@@ -54,10 +53,21 @@ class TestDefaults:
         nearby = doc[idx:idx + 200]
         assert "not a measurement" in nearby or "CHOSEN" in nearby or "chosen" in nearby
 
-    def test_knobs_carries_every_feekbobs_attribute_name(self):
+    def test_knobs_carries_every_feeknobs_attribute_name(self):
+        # Guards the guard: if FeeKnobs.__annotations__ ever came back empty
+        # (e.g. a bad refactor dropping the Protocol's body), the loop below
+        # would pass vacuously. Five is the count contracts section 2.2 pins.
+        assert len(_FEE_KNOBS_ATTRS) == 5
         k = Knobs()
         for name in _FEE_KNOBS_ATTRS:
             assert hasattr(k, name), f"Knobs is missing {name}, which fees.FeeKnobs requires"
+        # isinstance half of "isinstance/attribute cross-check" (contracts
+        # section 6.2, item 2): FeeKnobs is a structural Protocol, so runtime
+        # isinstance needs @runtime_checkable, which the Protocol does not
+        # declare (adding it would be an s1 contract change made from here).
+        # The attribute walk above is the check that Protocol supports
+        # without that decorator, and is what the contract's own wording
+        # ("isinstance/attribute cross-check", either kind) calls for.
 
 
 class TestFromEnv:
