@@ -66,13 +66,28 @@ EVERYTHING_ELSE_BP: int = 1290
 # quoted there, updated 4 Aug 2026 -- not independently re-fetched here, see
 # the module docstring). Departments the spec groups under one rate get one
 # entry each so a lookup by title needs no further parsing.
+#
+# Two entries are duplicated under eBay's real department title as well as
+# spec section 7's shorthand: section 7's own table says "Toys" and "Garden",
+# but section 9 (listing the actual departments stage one sweeps) names them
+# "Toys & Games" and "Garden & Patio" -- those are the strings
+# catalog_ebay.top_level_of() will actually read off a live category page at
+# integration. Without the alias, either leaf would silently fall through to
+# EVERYTHING_ELSE_BP forever, one basis-point table permanently unreachable
+# for two of the nine stage-one departments. The other seven titles are not
+# independently confirmed against a live page by this stream (see the module
+# docstring); if one of those turns out to be shortened the same way, it
+# fails the same safe way (EVERYTHING_ELSE_BP), just not silently anymore
+# once this pattern is known.
 FVF_BP_BY_TOP_LEVEL_NAME: dict[str, int] = {
     "Mobile Phones & Communication": 990,
     "Vehicle Parts & Accessories": 950,
     "Health & Beauty": 1090,
     "Toys": 1090,
+    "Toys & Games": 1090,
     "Sporting Goods": 1090,
     "Garden": 1090,
+    "Garden & Patio": 1090,
     "Home, Furniture & DIY": 1190,
     "Pet Supplies": 1290,
     "Crafts": 1290,

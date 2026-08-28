@@ -3,7 +3,8 @@
 Vinted's cap (960, ten pages of 96) and eBay's cap (10,000, measured: page 45
 at 240/page returned zero on a "21,000+ results" query) are different numbers
 on different platforms. A cap that silently defaulted to Vinted's for eBay
-would stop an eBay sweep 89x early and nobody would notice, because the
+would stop an eBay sweep at roughly 1/10th of its real cap (960 vs 10,000)
+-- missing about 90% of the results -- and nobody would notice, because the
 sweep loop would just look "done" -- this is the guard against that.
 """
 

@@ -145,9 +145,12 @@ def empty_row(source: str, source_id: str) -> dict:
     fill listed_at" is a visible `row["listed_at"] is None` rather than a key
     that was simply never there. `source` and `source_id` are the two the
     caller must supply here -- the other never-NULL columns (`seen_at`,
-    `available`, `content_hash`) are filled later, by the store rather than
-    the transport (contracts section 1.1), so they stay NULL on the row this
-    function returns.
+    `available`, `content_hash`) are defaulted later, by the store rather
+    than the transport (contracts section 1.1): the row this function
+    returns still has them set to None, and `MarketStore.record` is what
+    turns that None into `seen_at=now()`, `available=True` and a computed
+    `content_hash`, treating "present and None" the same as "the transport
+    never touched this" for every one of the three.
     """
     row: dict = {name: None for name in ROW_FIELDS}
     row["source"] = source
@@ -193,7 +196,8 @@ class MarketStore:
     # --- writing -----------------------------------------------------------
 
     def record(self, rows: list[dict]) -> int:
-        """Write only rows whose content changed. Returns rows written.
+        """Write rows; every eBay observation, only changed rows elsewhere.
+        Returns rows written.
 
         Raises:
             RuntimeError: if the byte budget is already spent. Refusing to grow
@@ -258,10 +262,20 @@ class MarketStore:
                             extra if isinstance(extra, str) or extra is None
                             else json.dumps(extra, separators=(",", ":")))
                     elif name == "available":
-                        # Never NULL: False once seen sold/gone. Unlike
-                        # `promoted` below, absence here defaults TRUE
-                        # (r.get with a default) rather than staying None.
-                        cols[name].append(bool(r.get("available", True)))
+                        # Never NULL: False once seen sold/gone, True
+                        # otherwise. `r.get("available", True)` alone is
+                        # wrong here for the same reason `.setdefault` alone
+                        # was wrong for `seen_at` above: a row built from
+                        # empty_row() (the contract-mandated way, section 1)
+                        # has "available" PRESENT and set to None, so the
+                        # dict.get default never fires and `bool(None)` silently
+                        # writes every such listing as sold/gone. Treat
+                        # present-and-None the same as omitted -- both mean
+                        # "the transport did not observe this" -- and default
+                        # that case to True, exactly like `seen_at` defaults
+                        # an unset value to now() rather than leaving it NULL.
+                        v = r.get("available")
+                        cols[name].append(True if v is None else bool(v))
                     elif name == "promoted":
                         # Nullable, unlike `available`: unknown is a real
                         # third state on Vinted rows and on any eBay row
@@ -305,7 +319,21 @@ class MarketStore:
     # --- reading -----------------------------------------------------------
 
     def sql(self, query: str):
-        """Run SQL against the whole table, exposed as `market`."""
+        """Run SQL against the whole table, exposed as `market`.
+
+        A `TIMESTAMPTZ` column (`seen_at`, `listed_at`) comes back rendered
+        in this connection's session timezone, not forced to UTC -- e.g. a
+        value stored as `09:30Z` fetches as `10:30 BST` on a box in that
+        timezone. Same instant, so equality and duration arithmetic on the
+        Python datetime are unaffected, but `.date()` on the fetched value
+        can differ from the UTC date for a late-evening timestamp. The
+        `seen_at`-bucketing queries in this class (`snapshot_dates`,
+        `rows_on`) route around this with an explicit `AT TIME ZONE 'UTC'`
+        before truncating to `::DATE`; a caller reading `listed_at` (e.g.
+        Tier 3's `velocity_day1`, design spec section 4) and deriving a date
+        from it needs the same explicit UTC cast, not `.date()` on the
+        fetched value as-is.
+        """
         if not self._has_data():
             return duckdb.sql("SELECT 1 WHERE false")
         con = duckdb.connect()
@@ -376,6 +404,15 @@ class MarketStore:
         before midnight); `rows_on` collapses that to one row per listing so
         a caller differencing two dates is never comparing the wrong pass
         within the same day.
+
+        Every returned dict has all of `ROW_FIELDS` present. `read_parquet`'s
+        `union_by_name=true` (see `sql()`) can only union columns that exist
+        in at least one file on disk -- a store holding only legacy files
+        written before this stream's 16 new columns existed returns rows
+        with those keys simply absent, not None, and a caller doing
+        `row["sold_qty"]` would KeyError instead of reading an honest
+        "unknown". Reindexing here means a caller can always use plain
+        indexing and get the documented NULL meaning instead.
         """
         if not self._has_data():
             return []
@@ -390,4 +427,5 @@ class MarketStore:
                   AND (seen_at AT TIME ZONE 'UTC')::DATE = DATE '{day_str}'
             ) WHERE rn = 1
         """)
-        return [dict(zip(rel.columns, row)) for row in rel.fetchall()]
+        return [{name: d.get(name) for name in ROW_FIELDS}
+                for d in (dict(zip(rel.columns, row)) for row in rel.fetchall())]

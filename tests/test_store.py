@@ -137,6 +137,9 @@ from datetime import UTC as _UTC
 from datetime import date as _date
 from datetime import datetime as _datetime
 
+import pyarrow as pa
+import pyarrow.parquet as pq
+
 from phoneloop.market_store import (
     ALWAYS_SNAPSHOT_SOURCES,
     ROW_FIELDS,
@@ -206,6 +209,36 @@ def test_empty_row_produces_every_row_fields_key():
         if name in ("source", "source_id"):
             continue
         assert row[name] is None, f"{name} should be NULL in an empty row"
+
+
+def test_empty_row_built_row_records_as_available(market_store):
+    """A row built exactly the contract-mandated way -- straight from
+    empty_row(), never touching "available" by hand -- must record as
+    available=True, never False.
+
+    This is deliberately NOT using the ebay_row()/vinted_row() helpers
+    above: both of them set row["available"] = True manually, which is
+    precisely why they could not catch the bug this guards. `empty_row()`
+    sets "available" PRESENT and None (not absent), so `r.get("available",
+    True)` alone returns None, not the default -- `bool(None)` is False,
+    silently recording every real transport's listing as sold/gone unless
+    the transport remembers to set "available" itself. Contract row 16:
+    "never NULL; False once seen sold/gone" -- a row nobody has observed
+    sold/gone must default True, the same way an omitted seen_at defaults
+    to now() rather than staying NULL.
+    """
+    row = empty_row("ebay", "avail-1")
+    row["title"] = "Wireless Charger 15W"
+    row["price_pence"] = 1999
+    row["sold_qty"] = 4
+    assert row["available"] is None, "empty_row must leave available untouched (None)"
+
+    market_store.record([row])
+    stored = market_store.since(days=1, source="ebay")
+    assert len(stored) == 1
+    assert stored[0]["available"] is True, (
+        "a row nobody marked sold/gone must not be stored as unavailable"
+    )
 
 
 def test_ebay_same_sold_qty_writes_two_rows_snapshot_semantics_guard(market_store):
@@ -338,3 +371,52 @@ def test_snapshot_dates_and_rows_on_split_a_midnight_straddle_in_utc(market_stor
 
 def test_always_snapshot_sources_contains_only_ebay():
     assert ALWAYS_SNAPSHOT_SOURCES == frozenset({"ebay"})
+
+
+_LEGACY_SCHEMA = pa.schema([
+    ("source", pa.string()), ("source_id", pa.string()),
+    ("seen_at", pa.timestamp("us", tz="UTC")), ("category", pa.string()),
+    ("shard", pa.string()), ("title", pa.string()),
+    ("price_pence", pa.int64()), ("total_pence", pa.int64()),
+    ("currency", pa.string()), ("condition", pa.string()),
+    ("brand", pa.string()), ("model", pa.string()),
+    ("storage_gb", pa.int32()), ("grade", pa.string()),
+    ("kind", pa.string()), ("available", pa.bool_()),
+    ("region", pa.string()), ("seller_id", pa.string()),
+    ("url", pa.string()), ("extra", pa.string()),
+    ("content_hash", pa.string()),
+])
+
+
+def test_rows_on_reindexes_a_legacy_21_column_only_store_to_all_37_keys(market_store):
+    """A store holding ONLY pre-this-stream (21-column) parquet files --
+    the real live store's actual shape as of this stream, before any eBay
+    row has ever been written -- must still return dicts with every
+    ROW_FIELDS key. `read_parquet(..., union_by_name=true)` can only union
+    columns that exist in at least one file on disk, so without the
+    reindex in rows_on(), row["sold_qty"] would KeyError here instead of
+    reading None, and s5 has no reason to expect that on a source this
+    stream is meant to make safe to read.
+    """
+    day_dir = market_store.dir / "date=2026-08-20" / "source=ebay"
+    day_dir.mkdir(parents=True, exist_ok=True)
+    legacy_row = {
+        "source": ["ebay"], "source_id": ["legacy-1"],
+        "seen_at": [_datetime(2026, 8, 20, 10, 0, tzinfo=_UTC)],
+        "category": [None], "shard": [None], "title": ["Old-style row"],
+        "price_pence": [999], "total_pence": [999], "currency": ["GBP"],
+        "condition": ["New"], "brand": [None], "model": [None],
+        "storage_gb": [None], "grade": [None], "kind": ["ask"],
+        "available": [True], "region": [None], "seller_id": [None],
+        "url": [None], "extra": [None], "content_hash": ["deadbeef"],
+    }
+    pq.write_table(pa.table(legacy_row, schema=_LEGACY_SCHEMA),
+                   day_dir / "part-legacy.parquet", compression="zstd")
+
+    rows = market_store.rows_on(_date(2026, 8, 20), source="ebay")
+    assert len(rows) == 1
+    assert set(rows[0].keys()) == set(ROW_FIELDS)
+    assert rows[0]["title"] == "Old-style row"
+    assert rows[0]["sold_qty"] is None
+    assert rows[0]["promoted"] is None
+    assert rows[0]["store_joined"] is None

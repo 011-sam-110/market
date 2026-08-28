@@ -94,6 +94,19 @@ def test_fvf_bp_leaf_missing_from_top_level_of_falls_to_everything_else(monkeypa
     assert fees.fvf_bp("TEST-LEAF-PHONES", top_level_of=top_level_of) == fees.EVERYTHING_ELSE_BP
 
 
+def test_fvf_bp_real_department_titles_from_spec_section_9_resolve():
+    """Spec section 7's fee table says "Toys" and "Garden"; section 9 (the
+    departments stage one actually sweeps) names them "Toys & Games" and
+    "Garden & Patio" -- the strings catalog_ebay.top_level_of() will read
+    off a real eBay page at integration. Both forms must resolve to the
+    same rate, or these two departments silently price at the fallback
+    forever."""
+    assert fees.FVF_BP_BY_TOP_LEVEL_NAME["Toys & Games"] == \
+        fees.FVF_BP_BY_TOP_LEVEL_NAME["Toys"] == 1090
+    assert fees.FVF_BP_BY_TOP_LEVEL_NAME["Garden & Patio"] == \
+        fees.FVF_BP_BY_TOP_LEVEL_NAME["Garden"] == 1090
+
+
 def test_fvf_bp_unknown_category_charges_worst_rate_not_cheapest():
     """An unknown category must not resolve to the cheapest rate in the
     table (Vehicle Parts, 950bp) -- it must resolve to the worst
