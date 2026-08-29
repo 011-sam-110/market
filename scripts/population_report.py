@@ -10,7 +10,7 @@ individually, and what the next sweep would unlock.
 
     python scripts/population_report.py                 # terminal summary
     python scripts/population_report.py --html          # + the report file
-    python scripts/population_report.py --html --summary  # ~60 KB, no explorer
+    python scripts/population_report.py --html --summary  # ~215 KB, no explorer
 
 Panels that cannot be computed from the dates on file are RENDERED, not
 hidden: each one names what it needs and shows no number at all. That is the
@@ -51,8 +51,14 @@ def main() -> int:
     ap.add_argument("--html", action="store_true",
                     help="write a self-contained HTML report under DATA_DIR/reports/")
     ap.add_argument("--summary", action="store_true",
+                    # Both figures MEASURED, not estimated: 220,708 bytes
+                    # (--summary) and 5,110,722 bytes (full) on the
+                    # 2026-08-29 and 2026-08-28 stores respectively. The
+                    # "~60 KB" this used to claim was out by 3.5x; a size
+                    # quoted in a help string ages with the data behind it,
+                    # so re-measure it rather than trusting this line.
                     help="omit the population explorer and its payload "
-                         "(~60 KB page instead of ~5 MB)")
+                         "(~215 KB page instead of ~5 MB)")
     ap.add_argument("--out", type=Path, default=None,
                     help="explicit destination for the HTML page")
     ap.add_argument("--limit-explorer", type=int, default=None,
