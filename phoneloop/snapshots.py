@@ -29,6 +29,7 @@ decide that on the caller's behalf.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
@@ -38,6 +39,29 @@ from phoneloop.market_store import MarketStore
 
 def _as_date(value: date | str) -> date:
     return value if isinstance(value, date) else date.fromisoformat(str(value))
+
+
+def _sold_bound_of(row: dict | None) -> bool | None:
+    """Was this row's sold_qty a lower bound ("10,000+ sold")?
+
+    None when the row is absent, carries no `extra`, or predates ebay.py
+    writing the key -- all of which mean "not known", which is deliberately
+    not the same answer as False. Unparseable `extra` is treated as unknown
+    rather than raising: a malformed blob on one row must not take down a
+    differencing pass over 40,000.
+    """
+    if row is None:
+        return None
+    raw = row.get("extra")
+    if not raw:
+        return None
+    try:
+        extra = json.loads(raw) if isinstance(raw, str) else raw
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(extra, dict) or "sold_bound" not in extra:
+        return None
+    return bool(extra["sold_bound"])
 
 
 @dataclass(frozen=True)
@@ -50,6 +74,13 @@ class ListingDelta:
     delta_sold: int | None   # None when either side is NULL or the listing is missing on a side
     days: float               # elapsed between the two observations
     known: bool                # delta_sold is not None
+    # Was that side's count a LOWER BOUND ("10,000+ sold") rather than an
+    # exact figure? None means the row predates ebay.py recording it, and is
+    # NOT the same as False -- "we did not look" against "we looked and it
+    # was exact". Reported here and acted on by the consumer, the same split
+    # this module already applies to a negative delta.
+    sold_a_bound: bool | None = None
+    sold_b_bound: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -141,6 +172,7 @@ def difference(store: MarketStore, date_a: date | str, date_b: date | str, *,
         listings[source_id] = ListingDelta(
             source_id=source_id, sold_a=sold_a, sold_b=sold_b,
             delta_sold=delta_sold, days=days, known=known,
+            sold_a_bound=_sold_bound_of(ra), sold_b_bound=_sold_bound_of(rb),
         )
 
     n_listings = len(listings)

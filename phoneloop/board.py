@@ -129,14 +129,29 @@ def _deltas_for_metrics(difference: Difference | None):
     the window's sales unrecoverable, an artefact means there was no
     measurement. None is the honest answer, and compute() already skips it.
 
-    This is a floor on the damage, not a repair. An inflated POSITIVE delta
-    from the same causes is indistinguishable from a real sale here and
-    still gets through; that needs the parser to keep the "+" bound.
+    A BOUNDED delta is dropped for the same reason. `ebay.py` now records
+    whether a count was "10,000+ sold" rather than "10,000 sold", and a
+    subtraction with a bound on either side has no defined answer: "616"
+    then "7,000+" is a rendering change, not 6,384 sales, and "7,000+" then
+    an exact 7,050 does not mean 50 -- the true start was anywhere at or
+    above 7,000. This catches what the negative floor cannot, since a
+    bounded reading moving UPWARD looks like an ordinary sale.
+
+    A row written before that flag shipped reports its bound as None
+    ("unknown"), and is treated as unbounded -- the behaviour it already
+    had, so no pair gets worse than it was.
     """
     if difference is None:
         return None
-    return {sid: ((ld.delta_sold if (ld.delta_sold is None or ld.delta_sold >= 0)
-                   else None), ld.days)
+
+    def _usable(ld):
+        if ld.delta_sold is None or ld.delta_sold < 0:
+            return None
+        if ld.sold_a_bound or ld.sold_b_bound:
+            return None
+        return ld.delta_sold
+
+    return {sid: (_usable(ld), ld.days)
             for sid, ld in difference.listings.items()}
 
 

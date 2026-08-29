@@ -190,10 +190,20 @@ def is_decoy(url: str) -> bool:
 # --- sold count, stock hints -------------------------------------------------
 
 # "552+ sold", "1,424+ sold", "76 sold" -- all measured live, 2026-08-27. The
-# "+" means "at least this many" and is dropped; the digits are kept exactly.
-# No match is unknown, never zero: a row that genuinely says "0 sold" is a
-# real zero and must come back as 0, not None.
-_SOLD_RE = re.compile(r"([\d,]+)\+?\s*sold\b", re.I)
+# digits are kept exactly. No match is unknown, never zero: a row that
+# genuinely says "0 sold" is a real zero and must come back as 0, not None.
+#
+# The "+" used to be dropped outright, and for reading one page that was
+# fine. Tier 3 then started SUBTRACTING two of these readings and calling the
+# result units sold, which two bounds cannot support: eBay buckets the bound,
+# so one listing renders "7,000+ sold" on one page view and a precise "616
+# sold" on another, and the gap between them is a rendering change, not 6,384
+# sales. Measured 2026-08-28: sold_qty is exactly 10000 on 60 rows, 2000 on
+# 6, 1000 on 5 -- bucket values. So the "+" is now CAPTURED as well, and
+# carried onto the row as `sold_bound`, letting the differencing layer refuse
+# a subtraction it cannot justify. The digits still travel either way; only
+# the subtraction is refused.
+_SOLD_RE = re.compile(r"([\d,]+)(\+)?\s*sold\b", re.I)
 
 # eBay's own stock-pressure copy. Recorded verbatim rather than folded into a
 # quantity -- "Almost gone" is not a number, and turning it into one would be
@@ -204,6 +214,13 @@ _STOCK_HINTS = ("Almost gone", "Last one")
 def _sold_qty(text: str) -> int | None:
     m = _SOLD_RE.search(text)
     return int(m.group(1).replace(",", "")) if m else None
+
+
+def _sold_is_bound(text: str) -> bool:
+    """Did the page say "N+ sold" rather than "N sold"? A row with no sold
+    line at all is not a bound -- it is unknown, and `sold_qty` is None."""
+    m = _SOLD_RE.search(text)
+    return bool(m and m.group(2))
 
 
 def _stock_hint(text: str) -> str:
@@ -391,6 +408,7 @@ class EbayListing:
     # added by s2 -- every one defaults, so existing constructions keep working
     item_id: str = ""                       # from the /itm/ URL
     sold_qty: int | None = None             # "1,283 sold" -> 1283; absent -> None, NEVER 0
+    sold_is_bound: bool = False             # "10,000+ sold" -> sold_qty 10000 AND this True
     seller_id: str = ""                     # "jaessentials"
     seller_feedback_bp: int | None = None   # "99.8% positive" -> 9980
     seller_feedback_n: int | None = None    # "(74.6K)" -> 74600
@@ -508,6 +526,7 @@ def parse_row(text: str, url: str = "", *, today: date | None = None) -> EbayLis
         url=url,
         item_id=_item_id_from_url(url),
         sold_qty=_sold_qty(text),
+        sold_is_bound=_sold_is_bound(text),
         seller_id=seller_id,
         seller_feedback_bp=feedback_bp,
         seller_feedback_n=feedback_n,
@@ -621,6 +640,10 @@ def to_row(listing: EbayListing, *, category: str, shard: str,
     """
     row = market_store.empty_row("ebay", listing.item_id)
     extra = {
+        # Always written, true or false. A row from before this shipped has
+        # the key ABSENT, and "absent" (bound unknown) must stay
+        # distinguishable from "measured, not a bound".
+        "sold_bound": listing.sold_is_bound,
         "aspects": list(listing.aspects),
         "watchers": listing.watchers,
         "ships_from": listing.ships_from,
