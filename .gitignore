@@ -17,3 +17,6 @@ cookies.txt
 #   PHONELOOP_HARNESS=record python scripts/capture.py
 # The test suite does not depend on them -- it builds its own in tmp_path.
 fixtures/
+
+.vercel
+.env*

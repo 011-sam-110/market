@@ -2,8 +2,9 @@
 REM eBay niche finder -- daily pipeline (design spec section 10; contracts
 REM section 4, s5_snapshots_board's "run_daily.cmd" deliverable).
 REM
-REM Runs SWEEP -> DEEPEN -> BOARD, in that order, once a day. DIFFERENCE
-REM (Tier 3) is NOT a separate step here: scripts\niche_board.py calls
+REM Runs SWEEP -> DEEPEN -> BOARD -> POPULATION -> PUBLISH, in that order,
+REM once a day. DIFFERENCE (Tier 3) is NOT a separate step here:
+REM scripts\niche_board.py calls
 REM phoneloop.snapshots.difference itself, over the two most recent
 REM snapshot dates in the store, whenever at least two exist (one exists on
 REM day one; the difference step naturally starts contributing from day
@@ -85,7 +86,7 @@ REM                     populated the store for today -- on an empty store it
 REM                     prints "0 listings to deepen" and exits 0 rather than
 REM                     failing, so it is safe to run daily even on a day
 REM                     SWEEP found nothing new.
-REM   [4/4] POPULATION REVIEW writes the self-contained population page
+REM   [4/5] POPULATION REVIEW writes the self-contained population page
 REM                     (scripts\population_report.py). Read-only over the
 REM                     store, ~20 s, and regenerated rather than one-off on
 REM                     purpose: a one-off HTML is a snapshot of today's
@@ -93,16 +94,23 @@ REM                     problems, a regenerated one is the instrument that
 REM                     shows them shrinking, and it means the page's locked
 REM                     panels fill themselves the night date 2 lands.
 REM
-REM                     THIS DOES NOT FIX THE PHONELOOP_DATA_DIR BLOCKER.
-REM                     This file still sets no PHONELOOP_DATA_DIR, so every
-REM                     step above -- and this one -- reads and writes
-REM                     config.py's default store (%%USERPROFILE%%\.phoneloop
-REM                     \data, which holds Vinted rows only), NOT the
-REM                     e2e_clean store the 2026-08-28 eBay sweep landed in.
-REM                     Scheduling this file unchanged would start a new eBay
-REM                     store rather than extend that one. The population
-REM                     page SURFACES that blocker (P17, and every locked
-REM                     card); it does not resolve it.
+REM                     The PHONELOOP_DATA_DIR blocker this block used to
+REM                     describe is RESOLVED -- see the default set below.
+REM                     It read: "this file still sets no PHONELOOP_DATA_DIR,
+REM                     so every step reads config.py's default store
+REM                     (%%USERPROFILE%%\.phoneloop\data, Vinted rows only)".
+REM                     That was true and is no longer; the promoted store is
+REM                     %%USERPROFILE%%\.phoneloop\prod, which holds the
+REM                     2026-08-28 and 2026-08-29 eBay snapshots, and the
+REM                     population page's locked panels duly filled the night
+REM                     date 2 landed. Kept as a note rather than deleted
+REM                     because a comment that describes a fixed blocker in
+REM                     the present tense is how it gets "re-fixed" later.
+REM   [5/5] PUBLISH     refreshes web\ from the reports just written and
+REM                     rebuilds its index. Stages content only -- it runs no
+REM                     git command, deliberately (this working tree carries
+REM                     untracked scratch files, and an automated `git add`
+REM                     is exactly how one of them reaches a remote).
 
 setlocal enabledelayedexpansion
 
@@ -124,31 +132,51 @@ if errorlevel 1 (
 set "PHONELOOP_HARNESS=live"
 if not defined PHONELOOP_DATA_DIR set "PHONELOOP_DATA_DIR=%USERPROFILE%\.phoneloop\prod"
 
-echo [run_daily] %DATE% %TIME% -- [1/4] SWEEP
+echo [run_daily] %DATE% %TIME% -- [1/5] SWEEP
 "%PY%" scripts\bulk_ebay.py --leaf-sweep --pages-per-shard 10
 if errorlevel 1 (
     echo [run_daily] SWEEP failed -- checkpointed, safe to re-run
     exit /b 1
 )
 
-echo [run_daily] %DATE% %TIME% -- [2/4] DEEPEN (Tier 2, item-page enrichment)
+echo [run_daily] %DATE% %TIME% -- [2/5] DEEPEN (Tier 2, item-page enrichment)
 "%PY%" scripts\bulk_ebay.py --deepen
 if errorlevel 1 (
     echo [run_daily] DEEPEN failed -- SWEEP already landed today's rows, safe to re-run
     exit /b 1
 )
 
-echo [run_daily] %DATE% %TIME% -- [3/4] BOARD (difference runs inside niche_board.py once 2+ snapshot dates exist)
+echo [run_daily] %DATE% %TIME% -- [3/5] BOARD (difference runs inside niche_board.py once 2+ snapshot dates exist)
 "%PY%" scripts\niche_board.py --products --html
 if errorlevel 1 (
     echo [run_daily] BOARD failed
     exit /b 1
 )
 
-echo [run_daily] %DATE% %TIME% -- [4/4] POPULATION REVIEW
-"%PY%" scripts\population_report.py --html
+REM --summary, not the full page. Both render the same panels; the full one
+REM additionally embeds a row-level explorer and weighs ~5 MB against ~215 KB
+REM (measured, 2026-08-29). Only the summary is publishable -- publish_web.py
+REM skips anything over 1 MB rather than committing 5 MB a night to the repo,
+REM so generating the full page here would leave the hosted site with no
+REM population review at all. The explorer is still a command away when it is
+REM actually wanted:
+REM     python scripts\population_report.py --html
+echo [run_daily] %DATE% %TIME% -- [4/5] POPULATION REVIEW
+"%PY%" scripts\population_report.py --html --summary
 if errorlevel 1 (
     echo [run_daily] POPULATION REVIEW failed
+    exit /b 1
+)
+
+REM Refreshes web\ from the reports just written and rebuilds its index. The
+REM Vercel project is connected to the GitHub repo, so a commit of web\ is
+REM what actually deploys; this step only stages the content locally.
+REM Deliberately NOT a git commit -- this repo holds untracked scratch files
+REM and an automated `git add` here is how one of them reaches a remote.
+echo [run_daily] %DATE% %TIME% -- [5/5] PUBLISH (stages web\ for deploy)
+"%PY%" scripts\publish_web.py
+if errorlevel 1 (
+    echo [run_daily] PUBLISH failed -- reports were still written under DATA_DIR\reports
     exit /b 1
 )
 

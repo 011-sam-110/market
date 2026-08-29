@@ -1,111 +1,107 @@
-# PhoneLoop
+# market
 
-Watches Vinted's phone category and flags listings priced materially below the
-going rate for that exact model, storage and condition.
+Finds dropshippable product niches on eBay UK: sweeps category hubs nightly,
+tracks what actually sells between snapshots, and scores each candidate against
+six knobs — margin, sell-through, price band, delivery, seller quality and
+saturation.
 
-Vinted's catalogue API answers anonymously — seven cookies from the homepage are
-the whole handshake — and the list response carries condition, favourites, views
-and the buyer fee. `total_item_price` already includes `service_fee`, so landed
-cost is exact rather than modelled.
+The repo is still named after its first life (`PhoneLoop`, a Vinted phone
+arbitrage watcher). That collector is preserved under `phoneloop/` — `vinted.py`,
+`cex.py` and `__main__.py` are its surface — but the work since has been the eBay
+niche finder, which is what everything below describes.
+
+## How it runs
+
+Three tiers, once a night, in this order:
+
+| Tier | What it does | Cost |
+|---|---|---|
+| 1 — sweep | 43 category hubs × price band × 3 pages | ~21 min, ~128 page loads |
+| 2 — deepen | item pages, for the fields only they carry (`seller_type`, delivery ETA) | ~9 s per listing |
+| 3 — difference | `sold_qty(today) − sold_qty(previous)`, per listing | no requests |
+
+```bash
+scripts\run_daily.cmd          # sweep -> deepen -> board -> publish
+```
+
+Tier 3 needs two snapshot dates, so it contributes nothing on night one and
+starts working on night two.
+
+## Egress — the part that constrains everything
+
+Measured 2026-08-28: eBay serves a 403 to the bundled Playwright Chromium, to
+every VPN/datacenter exit, **and** to the rotating residential proxy. What gets a
+200 is a Chrome for Testing build on the home IP, split-tunnelled out of Mullvad
+by path.
+
+That is why the scrape cannot move to a server, and why Vercel hosts only the
+generated reports (see *Publishing*). `PHONELOOP_CHROME_EXE` points at that
+binary and lives in `~/.phoneloop/.env` — machine config, never the repo.
+
+## The harness
+
+Anything that touches a live service goes through `phoneloop/harness.py`.
+
+| Mode | Behaviour |
+|---|---|
+| `replay` (default) | serves recorded pages; a missing recording **raises** |
+| `record` | live requests, writes cassettes |
+| `live` | live requests, writes nothing |
+
+The default is `replay` so a test or a stray script can never quietly hit eBay.
+Recordings are gitignored — one capture is ~9 MB of HTML that goes stale within
+hours, and the suite builds its own fixtures in `tmp_path`.
+
+## Honesty rules the code enforces
+
+These exist because the failure this project keeps hitting is *a number that is
+wrong rather than missing*.
+
+- **Unknown is never zero.** A missing `sold_qty` is excluded from its
+  denominator, not counted as no sales.
+- **Every figure carries its denominator.** 3.2 over 4 rows is not the claim 3.2
+  over 200 rows is.
+- **A figure is never compared to a threshold it isn't commensurate with.**
+  Sell-through withholds its verdict until the observed window approaches the 30
+  days the threshold describes — see `metrics.STR_WINDOW_DAYS`.
+- **eBay's "sold" counter is not a counter.** `10,000+ sold` is a lower bound and
+  is recorded as one; multi-variant listings report a different figure per page
+  view. Deltas across a bound, or that fall, are dropped as unknown rather than
+  published as sales.
+
+## Storage
+
+Date-partitioned parquet under `PHONELOOP_DATA_DIR` (default
+`~/.phoneloop/data`; the nightly job uses `~/.phoneloop/prod`), read with DuckDB.
+One row per listing per day, so history accumulates rather than being overwritten.
+Never committed.
+
+## Publishing
+
+`scripts/publish_web.py` copies the newest board and population reports into
+`web/` and rebuilds its index from what is actually on disk. Vercel serves that
+directory as a static site behind Vercel Authentication — it hosts the viewer
+only; the sweep stays on the home machine for the egress reason above.
 
 ## Setup
 
 ```bash
 pip install -r requirements.txt
-python -m phoneloop collect --once
+python -m pytest -q                      # 861 tests, no network
+python scripts/niche_board.py --products --html
 ```
-
-No credentials are needed to collect. Telegram alerts need two variables:
-
-```bash
-PHONELOOP_TELEGRAM_TOKEN=...
-PHONELOOP_TELEGRAM_CHAT_ID=...
-```
-
-## Commands
-
-| Command | What it does |
-|---|---|
-| `python -m phoneloop collect --once` | One pass, logged, no alerts |
-| `python -m phoneloop collect` | Continuous collection, no alerts |
-| `python -m phoneloop watch` | The live loop, alerts on |
-| `python -m phoneloop stats` | Bucket coverage and medians |
-
-## Week one: collect, don't buy
-
-`stats` will say `0 buckets` until there are enough observations, and that is
-correct rather than broken — a reference built on four listings is worse than no
-reference, so the pricebook returns `None` below `MIN_BUCKET_SAMPLES` and nothing
-is ever scored against it.
-
-Running `collect` for a week answers three questions at once:
-
-1. **How long does an underpriced phone survive?** Sets the required poll rate.
-2. **What does the price distribution actually look like?** Calibrates the bands.
-3. **How often is storage missing?** Measured at ~55% on the first live sample,
-   which is more than the design assumed.
-
-## How it works
-
-```
-01 WATCH    poll the category, newest first, dedupe on item id     ~25 KB
-02 PARSE    title -> make, model, storage, disqualifiers            <1 ms
-03 PRICE    rolling median for that bucket                          <1 ms
-04 SCORE    banded discount with a fraud floor                      <1 ms
-05 VERIFY   candidates only: public page, read description         1.9 MB
-06 ALERT    Telegram with landed price, spread, condition, link      ~1 s
-```
-
-Stages 2-4 are pure functions, so latency is the poll interval plus one page
-fetch. That makes the poll interval the only number worth tuning.
-
-## Three rules worth knowing before changing anything
-
-**Cheapness is not monotonic.** Past `BAND_BAIT` a low price stops meaning
-bargain and starts meaning fraud, brick, or stolen. Scoring returns a *band*,
-not a rank, and the cheapest listings are routed away from alerts. A
-rank-by-discount feed surfaces scams first, every time.
-
-**Storage is never guessed.** Around 55% of live listings omit it. Those price
-against the *lowest* capacity tier, so their discount reads smaller than it may
-be. That bias is deliberate — a missed deal costs nothing, a wrong one costs
-money.
-
-**Every failure degrades toward silence.** A fetch that fails, a bucket too thin,
-a listing that won't parse, Telegram being down: all of them end in "no alert",
-never in a guess. `tick()` cannot raise.
-
-## Measured, not assumed
-
-Verified against the live API on 2026-08-27:
-
-- Catalogue API answers anonymously; item detail is auth-gated (403) but the
-  public HTML page is not and carries the description.
-- Category `3565` removes accessory noise — free-text "iphone 13" returns cases.
-- `pagination.total_entries` caps at **960** even with filters, so wide
-  enumeration needs sharding by model and price band.
-- Rules parsing covers **78%** of the live feed (60% Apple-only, +18% from
-  Samsung). `scripts/parser_accuracy.py` re-measures it on demand.
-- The remaining 22% is mostly Google, Sony, Oppo and Xiaomi — the LLM tail, or
-  the next manufacturers to add.
-
-Still unproven: how fast an underpriced phone sells, what poll rate Vinted
-tolerates, and what share of very cheap listings are fraud.
 
 ## Layout
 
-```
-phoneloop/
-  config.py         every tunable; refuses to start with mis-ordered bands
-  parser.py         pure: title -> PhoneSpec
-  scorer.py         pure: price + reference -> banded Verdict
-  pricebook.py      rolling median + MAD per bucket
-  store.py          Parquet change-log, money as integer pence
-  vinted_client.py  session, search, public page
-  verifier.py       candidate second-look
-  alerter.py        Telegram, rate limited per bucket
-  watcher.py        the loop
-```
-
-Docs: `docs/superpowers/specs/` for the design, `docs/superpowers/plans/` for the
-implementation plan.
+| Path | What |
+|---|---|
+| `phoneloop/ebay.py` | search-row parser |
+| `phoneloop/ebay_item.py` | item-page parser (Tier 2) |
+| `phoneloop/market_store.py` | parquet store |
+| `phoneloop/snapshots.py` | Tier 3 differencing |
+| `phoneloop/metrics.py` | every figure, with its denominator |
+| `phoneloop/knobs.py` | the six thresholds |
+| `phoneloop/board.py` | ranking |
+| `phoneloop/population.py` | review-page panels |
+| `scripts/run_daily.cmd` | the nightly pipeline |
+| `docs/superpowers/` | design spec, contracts, build proof |
