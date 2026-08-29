@@ -30,7 +30,7 @@
 
     THE HONEST COST OF THE LOGON TRIGGER: neither bulk_ebay.py call in
     run_daily.cmd passes --headless (it defaults False), so the sweep drives
-    a VISIBLE Chrome for about an hour. A logon-triggered catch-up will open
+    a VISIBLE Chrome for about 20 minutes. A logon-triggered catch-up will open
     a browser window while you are working. Pass -NoLogonTrigger if that is
     not acceptable. Do NOT "fix" it with a stored password / run-whether-
     logged-on-or-not instead: headless has never been measured against eBay
@@ -228,7 +228,7 @@ Write-Host "  Daily 03:00 local, StartWhenAvailable (catches a missed window)"
 if ($NoLogonTrigger) {
     Write-Host "  (no logon trigger -- a night the machine is off is LOST)"
 } else {
-    Write-Host "  AtLogOn +10min -- catch-up. Opens a VISIBLE Chrome for ~1h."
+    Write-Host "  AtLogOn +10min -- catch-up. Opens a VISIBLE Chrome for ~20 min."
     Write-Host "  nightly.py's day-guard means at most one sweep per UTC day."
 }
 
@@ -247,7 +247,7 @@ Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $triggers `
 Write-Host ''
 Write-Host "Registered '$TaskName'." -ForegroundColor Green
 Write-Host ''
-Write-Host "Next, while you are AT the machine (the sweep is headed, ~1h):"
+Write-Host "Next, while you are AT the machine (the sweep is headed, ~20 min):"
 Write-Host "  schtasks /run /tn `"$TaskName`""
 Write-Host "That runs under the task's own principal, which is the only honest"
 Write-Host "test of %LOCALAPPDATA% resolution, PHONELOOP_DATA_DIR, the pinned"

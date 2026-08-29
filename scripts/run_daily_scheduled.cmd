@@ -46,6 +46,34 @@ REM     2   internal error
 
 setlocal
 
+REM THE STORE, set HERE and inherited by everything downstream.
+REM
+REM nightly.py owns the lock, the day-guard, the log and the heartbeat, and
+REM resolves their paths from PHONELOOP_DATA_DIR -- falling back to
+REM config.py's default (%USERPROFILE%\.phoneloop\data, Vinted rows only)
+REM when it is unset. run_daily.cmd, launched as its CHILD, defaults the same
+REM variable to ...\prod. A Task Scheduler action carries no environment of
+REM its own, so with nothing set here the night split in two: the sweep wrote
+REM its data to prod while the watcher wrote its heartbeat to data.
+REM
+REM Measured 2026-08-29 with `python scripts\nightly.py --dry-run`:
+REM     data_dir   ...\.phoneloop\data
+REM     heartbeat  ...\.phoneloop\data\health\last_run.json
+REM while register_daily_task.ps1 -Status reads
+REM                ...\.phoneloop\prod\health\last_run.json
+REM
+REM That is a GUARANTEED FALSE ALARM on every successful night -- the status
+REM check finding no heartbeat where it looks, for a night that ran fine --
+REM plus a day-guard that cannot see the other trigger's completed run, and
+REM _checkpoint_counts reading a file bulk_ebay never writes there. None of
+REM it goes red on its own; the sweep works, only the watching is broken.
+REM
+REM Setting it here fixes both halves at once: nightly.py reads this value,
+REM and run_daily.cmd's `if not defined` guard yields to it rather than
+REM overwriting it. The two files must keep naming the SAME store --
+REM tests/test_scheduled_store_agreement.py fails if they drift.
+set "PHONELOOP_DATA_DIR=%USERPROFILE%\.phoneloop\prod"
+
 set "PY=%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
 set "LOGDIR=%USERPROFILE%\.phoneloop\prod\logs"
 

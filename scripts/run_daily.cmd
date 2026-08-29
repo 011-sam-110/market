@@ -48,10 +48,26 @@ REM                     to a /b/ browse node that lists nothing, and the
 REM                     sweep would have booked that as an empty shard.
 REM                     Replayed end to end on 12 recorded pages (4 hubs)
 REM                     into a populated board.
-REM   --pages-per-shard caps page loads PER HUB. 10 here = up to ~430 page
-REM                     loads a night (~1 h at the measured ~9 s/page).
-REM                     Raise it toward 42 (the 10,000-result cap) for full
-REM                     Tier 1 coverage once that runtime is acceptable.
+REM   --pages-per-shard caps page loads PER HUB, and is 3 because that is
+REM                     what the 2026-08-28 and 2026-08-29 snapshots were
+REM                     swept at. It is a COMPARABILITY setting, not a
+REM                     throughput one.
+REM
+REM                     This read 10 until 2026-08-29. Left there, the first
+REM                     scheduled night would have swept ~3x the population of
+REM                     the two nights already in the store, and Tier 3 --
+REM                     which differences the two most recent dates -- would
+REM                     have booked thousands of listings from pages 4-10 as
+REM                     NEW arrivals overnight. That is the failure this
+REM                     project keeps hitting: not a missing number, a
+REM                     confident wrong one, and nothing about it goes red.
+REM
+REM                     Changing the depth is legitimate; doing it silently
+REM                     between two nights that get differenced is not. Raise
+REM                     it toward 42 (the 10,000-result cap) when full Tier 1
+REM                     coverage is wanted, and read the FIRST diff after the
+REM                     change as non-comparable.
+REM                     3 pages x 43 hubs = ~128 page loads, ~21 min measured.
 REM   checkpoint        dated per UTC day (bulk_ebay_checkpoint_YYYY-MM-DD
 REM                     .json): a failed night resumes, the next night
 REM                     starts clean -- Tier 3 needs the whole population
@@ -133,7 +149,7 @@ set "PHONELOOP_HARNESS=live"
 if not defined PHONELOOP_DATA_DIR set "PHONELOOP_DATA_DIR=%USERPROFILE%\.phoneloop\prod"
 
 echo [run_daily] %DATE% %TIME% -- [1/5] SWEEP
-"%PY%" scripts\bulk_ebay.py --leaf-sweep --pages-per-shard 10
+"%PY%" scripts\bulk_ebay.py --leaf-sweep --pages-per-shard 3
 if errorlevel 1 (
     echo [run_daily] SWEEP failed -- checkpointed, safe to re-run
     exit /b 1
