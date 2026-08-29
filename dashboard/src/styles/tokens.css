@@ -1,0 +1,113 @@
+/* The Measurement Record — the whole palette and scale, in one place.
+ *
+ * Two rules govern this file.
+ *
+ * 1. There are exactly three colours that are not paper, and all three are
+ *    verdicts: violet is WITHHELD, red is FAIL, green is PASS. Ochre is the
+ *    fourth chart slot and means "a reading exists but is bounded". Nothing
+ *    decorative may borrow any of them, because a coloured thing on this page
+ *    is a claim about evidence.
+ *
+ * 2. Every colour used as a chart mark was run through the dataviz validator
+ *    against this paper surface, not chosen by eye:
+ *
+ *      node scripts/validate_palette.js "#5B4B8A,#C24236,#2E7D4F,#B0821F" \
+ *        --mode light --surface "#F3F5EF" --pairs all
+ *
+ *    It passes the lightness band, the chroma floor, the normal-vision floor
+ *    (worst pair ΔE 15.5) and contrast, and lands the deutan CVD pair
+ *    green↔red at ΔE 6.8. That is inside the 6–8 floor band, which is legal
+ *    ONLY with secondary encoding — so every four-bucket mark on this site
+ *    also carries a direct label and its own hatch. Colour alone never
+ *    distinguishes them. Drop the label or the hatch and this palette becomes
+ *    non-compliant.
+ *
+ *    The coverage ramp was validated separately with validateOrdinal: one
+ *    hue, monotone lightness, and a light end that still clears the paper at
+ *    2.62:1 — the pale greens a fanfold sheet suggests all failed that floor.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* --- paper ------------------------------------------------------------ */
+  --paper: #f3f5ef;
+  --paper-sunk: #eaeee5; /* a field recessed into the sheet */
+  --bar: #dbe6d7; /* the green bar of continuous-feed stationery */
+  --rule: #8e9c93; /* hairline; never used for text */
+  --rule-faint: #c3ccc3;
+
+  /* --- ink -------------------------------------------------------------- */
+  /* Secondary ink is tinted from the paper's own hue. A neutral gray on a
+   * warm-green sheet reads as a printing fault. */
+  --ink: #141d17; /* carbon, 15.70:1 on paper */
+  --ink-2: #4a5750; /*  6.90:1 — labels, prose */
+  --ink-3: #5e6b63; /*  5.09:1 — the smallest type that still carries meaning */
+
+  /* --- verdicts --------------------------------------------------------- */
+  --withheld: #5b4b8a; /* 6.78:1 — the stamp, and "unknown" everywhere */
+  --withheld-wash: #ece8f4;
+  --fail: #a8302a; /* 6.13:1 — fail as TEXT */
+  --fail-mark: #c24236; /* 4.63:1 — fail as a chart FILL */
+  --fail-wash: #f6e6e3;
+  --pass: #2e7d4f; /* 4.59:1 */
+  --pass-wash: #e2efe5;
+  --bounded: #b0821f; /* a reading that exists but is bounded */
+
+  /* --- coverage ramp (sequential, one hue, validated) -------------------- */
+  --cov-1: #6da484;
+  --cov-2: #4d9169;
+  --cov-3: #2e7d4f;
+  --cov-4: #256440;
+  --cov-5: #1a472d;
+
+  /* --- type ------------------------------------------------------------- */
+  /* Everything is set one step larger than a desktop-first scale would use.
+   * This board is read on a phone most mornings and at 80% browser zoom on
+   * the desk, where a conventional 13px micro-label renders at 10.4 device
+   * px and stops being readable. 15px is the floor here, not 12px. */
+  --face: "Archivo Variable", "Archivo", system-ui, sans-serif;
+  --face-narrow: "Archivo Narrow", "Archivo Variable", system-ui, sans-serif;
+
+  --t-record: clamp(2.75rem, 11vw, 5.25rem); /* the figure IS the material */
+  --t-figure: clamp(1.6rem, 5.2vw, 2.35rem); /* a knob's reading */
+  --t-head: clamp(1.35rem, 3.4vw, 1.7rem);
+  --t-title: 1.125rem; /* a product title, at reading size */
+  --t-body: 1rem; /* 17px — see --html-size below */
+  --t-label: 0.9375rem; /* 16px */
+  --t-micro: 0.875rem; /* 15px — the floor */
+
+  --html-size: 17px;
+
+  /* --- measure ---------------------------------------------------------- */
+  --measure: 68ch;
+
+  /* --- rhythm ----------------------------------------------------------- */
+  --s1: 0.25rem;
+  --s2: 0.5rem;
+  --s3: 0.75rem;
+  --s4: 1rem;
+  --s5: 1.5rem;
+  --s6: 2rem;
+  --s7: 3rem;
+  --s8: 4.5rem;
+
+  --hair: 1px;
+  --heavy: 3px; /* reserved: the binding knob's rule, and nothing else */
+
+  /* --- depth ------------------------------------------------------------ */
+  /* Paper lifting off paper: a real offset and a soft blur, tinted from the
+   * ink rather than black. */
+  --lift: 0 1px 2px rgba(20, 29, 23, 0.07), 0 6px 18px -8px rgba(20, 29, 23, 0.22);
+  --lift-high: 0 2px 4px rgba(20, 29, 23, 0.08), 0 18px 44px -16px rgba(20, 29, 23, 0.34);
+
+  /* --- motion ----------------------------------------------------------- */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur: 260ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur: 1ms;
+  }
+}

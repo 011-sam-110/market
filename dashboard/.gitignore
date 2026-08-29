@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.vercel/
+
+# The exported data bundle: 21 MB of generated JSON, rewritten nightly by
+# scripts/export_dashboard.py before the build. Committing it would put a
+# 21 MB diff in the history every night and make the checkout the source of
+# truth for figures whose source of truth is the store. Regenerate with:
+#   python scripts/export_dashboard.py --data-dir ~/.phoneloop/prod
+public/data/

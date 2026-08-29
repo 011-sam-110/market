@@ -1,0 +1,243 @@
+/* The sheet, and the parts of the browser that ship with no design system.
+ * Selection, caret, scrollbars, focus rings and the numerals in a data table
+ * all default to something that belongs to nobody; on a board about
+ * measurement they are the first thing that gives the page away. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: var(--html-size);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--face);
+  font-size: var(--t-body);
+  line-height: 1.5;
+  /* Figures must line up in a column even in running prose: this board is
+   * one long comparison of numbers. */
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--bar);
+  color: var(--ink);
+}
+
+:root {
+  caret-color: var(--withheld);
+  accent-color: var(--ink);
+  scrollbar-color: var(--rule) transparent;
+  scrollbar-width: thin;
+}
+
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--rule);
+  border: 3px solid var(--paper);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-3);
+}
+
+/* One focus ring for the whole board, offset so it never sits on a hairline
+ * and gets mistaken for one. */
+:focus-visible {
+  outline: 2px solid var(--withheld);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+a {
+  color: inherit;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 0.18em;
+  text-decoration-thickness: 1px;
+}
+a:hover {
+  text-decoration-color: var(--ink);
+}
+
+button,
+input,
+select {
+  font: inherit;
+  font-variant-numeric: inherit;
+  color: inherit;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  text-wrap: balance;
+}
+
+p {
+  margin: 0;
+  max-width: var(--measure);
+}
+
+/* --- the sheet -------------------------------------------------------- */
+
+.sheet {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 var(--s4) calc(var(--s8) + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 820px) {
+  .sheet {
+    padding-left: var(--s6);
+    padding-right: var(--s6);
+    padding-bottom: var(--s8);
+  }
+}
+
+/* --- small-caps denominator label ------------------------------------- */
+/* The typographic job of this board: no figure appears without the count it
+ * was measured over, directly under it, in this style. */
+
+.den {
+  display: block;
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.den--unknown {
+  color: var(--withheld);
+}
+
+/* --- a ruled figure field --------------------------------------------- */
+
+.field {
+  position: relative;
+  padding: var(--s3) var(--s3) var(--s2);
+  border-top: var(--hair) solid var(--rule);
+  min-width: 0;
+}
+
+.field__figure {
+  display: block;
+  font-size: var(--t-figure);
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.field__name {
+  display: block;
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  margin-bottom: var(--s1);
+}
+
+.field--fail .field__figure {
+  color: var(--fail);
+}
+.field--withheld {
+  background: var(--withheld-wash);
+}
+.field--withheld .field__figure {
+  color: var(--withheld);
+}
+
+/* The binding knob: the one heavy rule on the page. */
+.field--binding {
+  border-top-width: var(--heavy);
+  border-top-color: var(--ink);
+}
+
+/* --- the stamp -------------------------------------------------------- */
+/* A withheld verdict owns its whole field, the way VOID owns a cancelled
+ * coupon. It is never a small grey dash. */
+
+.stamp {
+  display: inline-block;
+  font-family: var(--face-narrow);
+  font-weight: 700;
+  font-size: var(--t-micro);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--withheld);
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  padding: 0.15em 0.45em 0.1em;
+  transform: rotate(-2.2deg);
+  transform-origin: left center;
+  white-space: nowrap;
+}
+
+.stamp--fail {
+  color: var(--fail);
+}
+
+/* --- fanfold ---------------------------------------------------------- */
+
+.fanfold {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.fanfold > li {
+  position: relative;
+}
+
+/* The band is the reading aid, not decoration: it keeps the eye on one entry
+ * across a wide sheet, which is exactly the job it did on paper. */
+.fanfold > li:nth-child(even) {
+  background: var(--bar);
+}
+
+/* --- utility ---------------------------------------------------------- */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.scroll-x {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
