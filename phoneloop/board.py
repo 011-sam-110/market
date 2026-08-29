@@ -101,10 +101,43 @@ def _deltas_for_metrics(difference: Difference | None):
     whose delta is None (metrics.py, "demand, windowed"), so filtering
     again in this module would just duplicate that check in a second place
     that could drift from the first.
+
+    A NEGATIVE delta is dropped to None here, and this is the module that
+    has to do it. `snapshots.difference()` deliberately records the raw
+    negative -- "a relist resets eBay's lifetime counter, so sold(B) <
+    sold(A) is a real, if awkward, observation... a caller that wants to
+    treat a negative delta as a relist artefact can filter it out itself,
+    but difference() does not decide that on the caller's behalf." This is
+    that caller, and it never filtered.
+
+    Measured on the real store, 2026-08-28 -> 2026-08-29: 251 of 4,752 known
+    deltas were negative, worst -7,468 on a listing whose title and price
+    were identical on both days. Summed into `str_window_bp` that produced a
+    sell-through of -24,883,333bp on the fixture in
+    tests/test_snapshot_delta_trust.py -- -248,833%, which is not a
+    quantity that can exist.
+
+    Nor is "relist" the whole story: within the single 2026-08-28 sweep, 30
+    of 328 twice-observed listings disagree with themselves about sold_qty
+    (worst spread 6,384) with no time elapsed for anything to sell. Two
+    measured causes -- "10,000+ sold" parsed to an exact 10000 (60 rows sit
+    on that value), and multi-variant listings rendering a different variant
+    per page view (sold_qty and price_pence moving together).
+
+    For the question this figure answers -- units sold in this window -- a
+    negative is uninformative whichever cause produced it: a relist makes
+    the window's sales unrecoverable, an artefact means there was no
+    measurement. None is the honest answer, and compute() already skips it.
+
+    This is a floor on the damage, not a repair. An inflated POSITIVE delta
+    from the same causes is indistinguishable from a real sale here and
+    still gets through; that needs the parser to keep the "+" bound.
     """
     if difference is None:
         return None
-    return {sid: (ld.delta_sold, ld.days) for sid, ld in difference.listings.items()}
+    return {sid: ((ld.delta_sold if (ld.delta_sold is None or ld.delta_sold >= 0)
+                   else None), ld.days)
+            for sid, ld in difference.listings.items()}
 
 
 def _score(knob_results: Sequence[KnobResult]) -> float:
