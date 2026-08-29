@@ -85,6 +85,24 @@ REM                     populated the store for today -- on an empty store it
 REM                     prints "0 listings to deepen" and exits 0 rather than
 REM                     failing, so it is safe to run daily even on a day
 REM                     SWEEP found nothing new.
+REM   [4/4] POPULATION REVIEW writes the self-contained population page
+REM                     (scripts\population_report.py). Read-only over the
+REM                     store, ~20 s, and regenerated rather than one-off on
+REM                     purpose: a one-off HTML is a snapshot of today's
+REM                     problems, a regenerated one is the instrument that
+REM                     shows them shrinking, and it means the page's locked
+REM                     panels fill themselves the night date 2 lands.
+REM
+REM                     THIS DOES NOT FIX THE PHONELOOP_DATA_DIR BLOCKER.
+REM                     This file still sets no PHONELOOP_DATA_DIR, so every
+REM                     step above -- and this one -- reads and writes
+REM                     config.py's default store (%%USERPROFILE%%\.phoneloop
+REM                     \data, which holds Vinted rows only), NOT the
+REM                     e2e_clean store the 2026-08-28 eBay sweep landed in.
+REM                     Scheduling this file unchanged would start a new eBay
+REM                     store rather than extend that one. The population
+REM                     page SURFACES that blocker (P17, and every locked
+REM                     card); it does not resolve it.
 
 setlocal enabledelayedexpansion
 
@@ -106,24 +124,31 @@ if errorlevel 1 (
 set "PHONELOOP_HARNESS=live"
 if not defined PHONELOOP_DATA_DIR set "PHONELOOP_DATA_DIR=%USERPROFILE%\.phoneloop\prod"
 
-echo [run_daily] %DATE% %TIME% -- [1/3] SWEEP
+echo [run_daily] %DATE% %TIME% -- [1/4] SWEEP
 "%PY%" scripts\bulk_ebay.py --leaf-sweep --pages-per-shard 10
 if errorlevel 1 (
     echo [run_daily] SWEEP failed -- checkpointed, safe to re-run
     exit /b 1
 )
 
-echo [run_daily] %DATE% %TIME% -- [2/3] DEEPEN (Tier 2, item-page enrichment)
+echo [run_daily] %DATE% %TIME% -- [2/4] DEEPEN (Tier 2, item-page enrichment)
 "%PY%" scripts\bulk_ebay.py --deepen
 if errorlevel 1 (
     echo [run_daily] DEEPEN failed -- SWEEP already landed today's rows, safe to re-run
     exit /b 1
 )
 
-echo [run_daily] %DATE% %TIME% -- [3/3] BOARD (difference runs inside niche_board.py once 2+ snapshot dates exist)
+echo [run_daily] %DATE% %TIME% -- [3/4] BOARD (difference runs inside niche_board.py once 2+ snapshot dates exist)
 "%PY%" scripts\niche_board.py --products --html
 if errorlevel 1 (
     echo [run_daily] BOARD failed
+    exit /b 1
+)
+
+echo [run_daily] %DATE% %TIME% -- [4/4] POPULATION REVIEW
+"%PY%" scripts\population_report.py --html
+if errorlevel 1 (
+    echo [run_daily] POPULATION REVIEW failed
     exit /b 1
 )
 
