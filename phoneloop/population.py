@@ -787,6 +787,15 @@ def panel_seller_footprint(b: Build) -> tuple[object, str | None]:
         "by_breadth": sorted(sellers, key=lambda s: (-s["leaves"], -s["listings"]))[:15],
         "one_leaf": one_leaf, "two_plus": two_plus, "five_plus": five_plus,
         "max_leaves": max((s["leaves"] for s in sellers), default=0),
+        # The denominator the breadth column divides by. Counted from the
+        # rows in hand, never a constant: the renderer used to divide by a
+        # literal 67, which is the size of nothing this project sweeps (the
+        # in-scope catalogue holds 43), so a seller present in every leaf we
+        # look at rendered as 43-of-67 -- a trader with the whole market
+        # shown as covering two thirds of it.
+        "leaves_swept": b.sql(
+            "SELECT count(DISTINCT leaf_category_id) FROM latest "
+            "WHERE leaf_category_id IS NOT NULL").fetchone()[0],
     }, None
 
 
@@ -1171,6 +1180,11 @@ def panel_deepen_budget(b: Build) -> tuple[object, str | None]:
         "business": len(business),
         "private": len(private),
         "leaves_touched": len(per_leaf),
+        # Leaves Tier 2 reached, out of the leaves that exist to reach --
+        # counted, not the literal 67 this used to divide by. See the note
+        # on "leaves_swept" in panel_seller_footprint.
+        "leaves_swept": len({r.get("leaf_category_id") for r in b.rows
+                             if r.get("leaf_category_id")}),
         "rows": in_scope_rows,
         "zero_denominator": zero_denominator,
         "n_niches": len(b.niches),

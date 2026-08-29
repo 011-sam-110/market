@@ -762,7 +762,8 @@ def _render_footprint(b: Build) -> str:
               _e(_num(s["leaves"])))
              for s in p["by_depth"]]
     breadth = [(_e(s["seller_id"]),
-                _fig(_num(s["leaves"]), _of(s["leaves"], 67, "leaves swept")),
+                _fig(_num(s["leaves"]),
+                     _of(s["leaves"], p["leaves_swept"], "leaves swept")),
                 _e(_num(s["listings"])))
                for s in p["by_breadth"]]
     body = [
@@ -1206,7 +1207,7 @@ def _render_deepen(b: Build) -> str:
         f'<div class="band">{_fig(_num(p["deepened"]), _of(p["deepened"], p["n"], "listings deepened"))}</div>'
         f'<div class="band">{_fig(_num(p["business"]), _of(p["business"], p["deepened"], "business"))}</div>'
         f'<div class="band">{_fig(_num(p["private"]), _of(p["private"], p["deepened"], "private"))}</div>'
-        f'<div class="band">{_fig(_num(p["leaves_touched"]), _of(p["leaves_touched"], 67, "leaves touched"))}</div>'
+        f'<div class="band">{_fig(_num(p["leaves_touched"]), _of(p["leaves_touched"], p["leaves_swept"], "leaves touched"))}</div>'
         f'<div class="band">{_fig(_num(p["zero_denominator"]), _of(p["zero_denominator"], p["n_niches"], "niches with NO business landed price"))}</div>'
         '</div>',
         _table(("leaf", "deepened", "business", "priced", "with an ETA",
