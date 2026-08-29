@@ -1,0 +1,125 @@
+"""Export the whole store as the dashboard's JSON bundle.
+
+Reads the store ONCE through `population.build()` and hands that one Build to
+every exporter, so no two files in a bundle can disagree about the population
+they describe.
+
+    python scripts/export_dashboard.py --data-dir ~/.phoneloop/prod
+
+Writes into `dashboard/public/data` by default. Every file is written
+atomically and the run prints a size table, because payload size is a real
+constraint on a static host and a bundle that quietly tripled is worth
+noticing the day it happens rather than the day the page stops loading.
+
+This is a READ-ONLY consumer of the store. It opens no network connection and
+writes nothing back into the data directory.
+"""
+
+from __future__ import annotations
+
+import argparse
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from phoneloop import config, dashexport  # noqa: E402
+from phoneloop.knobs import Knobs  # noqa: E402
+from phoneloop.population import build  # noqa: E402
+
+
+def _git_sha(repo: Path) -> str:
+    """The commit this bundle was built from, or a marked unknown.
+
+    Marked, not blank: a dashboard footer reading "built from " invites the
+    reader to assume the field is broken rather than that the answer is
+    genuinely unavailable.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        sha = out.stdout.strip()
+        return sha or "unknown"
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+
+
+def _human(n: int) -> str:
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.2f} MB"
+    if n >= 1_000:
+        return f"{n / 1_000:.1f} KB"
+    return f"{n} B"
+
+
+def main(argv: list[str] | None = None) -> int:
+    repo = Path(__file__).resolve().parent.parent
+    parser = argparse.ArgumentParser(
+        description="Export the niche-finder store as the dashboard JSON bundle")
+    parser.add_argument("--data-dir", default=None,
+                        help="store to read (default: phoneloop.config)")
+    parser.add_argument("--out", default=str(repo / "dashboard" / "public" / "data"),
+                        help="directory to write the bundle into")
+    parser.add_argument("--skip-listings", action="store_true",
+                        help="omit the full listing payload (the big one) for a "
+                             "fast structural run")
+    parser.add_argument("--indent", type=int, default=None,
+                        help="pretty-print with this indent (bigger files; for "
+                             "reading a bundle by hand, not for shipping)")
+    args = parser.parse_args(argv)
+
+    data_dir = Path(args.data_dir) if args.data_dir else config.load().DATA_DIR
+    out_dir = Path(args.out)
+    knobs = Knobs.from_env()
+    generated_at = datetime.now(timezone.utc)
+
+    print(f"store   {data_dir}")
+    print(f"out     {out_dir}")
+    print("reading the store once ...", flush=True)
+    b = build(data_dir, knobs)
+
+    if b.day is None:
+        print("  store holds no eBay snapshots -- writing an empty-state bundle")
+
+    day = b.day.isoformat() if b.day else "empty"
+    written: list[tuple[str, int]] = []
+
+    def emit(name: str, payload: object) -> None:
+        size = dashexport.write_json(out_dir / name, payload, indent=args.indent)
+        written.append((name, size))
+        print(f"  {name:<34} {_human(size):>10}", flush=True)
+
+    emit("manifest.json", dashexport.build_manifest(
+        b, git_sha=_git_sha(repo), generated_at=generated_at,
+        schema_version=dashexport.SCHEMA_VERSION, store_path=str(data_dir)))
+    emit("knobs.json", dashexport.export_knobs(knobs))
+    emit("fees.json", dashexport.export_fees(b))
+    emit(f"niches-{day}.json", dashexport.export_niches(b, knobs))
+    products = dashexport.product_payloads(b, knobs)
+    emit(f"products-{day}.json", dashexport.round_floats(products["board"]))
+    emit(f"product-metrics-{day}.json", dashexport.round_floats(products["metrics"]))
+    emit(f"coverage-{day}.json", dashexport.export_coverage(b))
+
+    if b.diff is not None:
+        emit(f"deltas-{b.diff.date_a.isoformat()}-{b.diff.date_b.isoformat()}.json",
+             dashexport.round_floats(dashexport.export_deltas(b)))
+    else:
+        emit("deltas.json", dashexport.export_deltas(b))
+
+    if args.skip_listings:
+        print("  listings                           SKIPPED (--skip-listings)")
+    else:
+        emit(f"listings-{day}.json",
+             dashexport.round_floats(dashexport.encode_listings(b.rows, b.extra)))
+
+    total = sum(size for _n, size in written)
+    print(f"\n  {'TOTAL':<34} {_human(total):>10}   ({len(written)} files)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
