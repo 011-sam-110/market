@@ -16,7 +16,13 @@ cookies.txt
 # history would bloat with snapshots that go stale immediately. Rebuild with
 #   PHONELOOP_HARNESS=record python scripts/capture.py
 # The test suite does not depend on them -- it builds its own in tmp_path.
-fixtures/
+#
+# ANCHORED to the repo root on purpose. A bare `fixtures/` matches a directory
+# of that name at ANY depth, which silently swallowed
+# dashboard/test/fixtures/knob-golden.json -- a fixture that IS meant to be
+# committed, and whose absence would fail the suite on a fresh clone while
+# passing on the machine that generated it.
+/fixtures/
 
 .vercel
 .env*

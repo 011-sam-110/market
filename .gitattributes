@@ -1,0 +1,4 @@
+# The knob golden fixture is byte-compared by scripts/export_knob_golden.py
+# --check and replayed by the TypeScript suite. Line-ending translation would
+# make it look drifted on one machine and clean on another.
+dashboard/test/fixtures/knob-golden.json -text

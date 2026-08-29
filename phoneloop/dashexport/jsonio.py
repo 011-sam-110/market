@@ -95,7 +95,13 @@ def write_json(path: Path | str, obj: object, *, indent: int | None = None) -> i
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = dumps(obj, indent=indent).encode("utf-8")
+    text = dumps(obj, indent=indent)
+    if indent is not None:
+        # A pretty-printed file is one somebody commits and reads in a diff, so
+        # it gets the trailing newline every other text file has. The compact
+        # shipping payloads do not: they are parsed, never read.
+        text += "\n"
+    payload = text.encode("utf-8")
 
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
     try:

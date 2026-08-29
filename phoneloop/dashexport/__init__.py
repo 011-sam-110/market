@@ -39,11 +39,13 @@ from phoneloop.dashexport.board_export import (  # noqa: E402
 )
 from phoneloop.dashexport.columnar import encode_listings, export_deltas  # noqa: E402
 from phoneloop.dashexport.coverage import export_coverage  # noqa: E402
+from phoneloop.dashexport.golden import build_golden  # noqa: E402
 from phoneloop.dashexport.jsonio import dumps, round_floats, write_json  # noqa: E402
 from phoneloop.dashexport.manifest import build_manifest  # noqa: E402
 
 __all__ = [
     "SCHEMA_VERSION",
+    "build_golden",
     "build_manifest",
     "dumps",
     "encode_listings",
