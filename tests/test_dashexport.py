@@ -147,6 +147,69 @@ def test_every_exported_knob_carries_a_denominator(b, knobs):
             assert isinstance(k["denominator"], int)
 
 
+# Which `Metrics` denominator each knob's own denominator must come from.
+# `metrics.check` picks between the candidates per row -- median basis or floor
+# basis, windowed sell-through or lifetime -- so the test accepts any of them
+# and rejects everything else.
+KNOB_DENOMINATOR_CANDIDATES: dict[str, tuple[str, ...]] = {
+    "min_margin": ("price_median_denominator", "price_floor_denominator"),
+    "sell_through": ("str_window_denominator", "str_lifetime_denominator"),
+    "price_band": ("price_median_denominator",),
+    "delivery": ("eta_median_denominator",),
+    "seller_quality": ("feedback_median_denominator",),
+}
+
+
+def _assert_denominator_traces_to_a_metric(knob: str, denominator: int,
+                                           metrics: dict, where: str) -> None:
+    if knob == "saturation":
+        # Saturation's denominator is "was a competitor count supplied", not a
+        # fraction of the population -- 1 or 0, and 0 means unknown.
+        assert denominator in (0, 1), f"{where}: saturation denominator {denominator}"
+        return
+    candidates = {metrics[c] for c in KNOB_DENOMINATOR_CANDIDATES[knob]}
+    assert denominator in candidates, (
+        f"{where}: {knob} reports denominator={denominator}, which is not any "
+        f"of {sorted(candidates)} from this row's own metrics. A denominator "
+        "that does not trace back to the data is the '67' bug: it was measured "
+        "once, frozen, and then divided by forever."
+    )
+
+
+def test_every_knob_denominator_traces_back_to_this_rows_metrics(b, knobs):
+    """A denominator must be counted from the data, never a literal.
+
+    The historical version of this bug divided a breadth share by a hardcoded
+    67 -- a real measurement from one day, frozen. The next day's identical
+    sweep returned 101 distinct leaves and the panel rendered shares above
+    100%. Nothing went red, because 67 is a perfectly plausible integer.
+    """
+    rows = export_niches(b, knobs)["rows"]
+    assert rows, "fixture must produce board rows or this asserts nothing"
+    for row in rows:
+        for k in row["knobs"]:
+            _assert_denominator_traces_to_a_metric(
+                k["knob"], k["denominator"], row["metrics"],
+                f"niche {row['key']}")
+
+
+def test_product_knob_denominators_trace_back_too(b, knobs):
+    """The columnar product path builds knobs through different code from the
+    row-shaped niche path, so it needs its own guard or half the bundle is
+    unprotected."""
+    payloads = product_payloads(b, knobs)
+    board_payload, metrics_payload = payloads["board"], payloads["metrics"]
+    assert board_payload["n"], "fixture must produce products"
+
+    columns = metrics_payload["columns"]
+    for i in range(board_payload["n"]):
+        row_metrics = {name: values[i] for name, values in columns.items()}
+        for knob, slot in board_payload["knobs"]["by_knob"].items():
+            _assert_denominator_traces_to_a_metric(
+                knob, slot["denominator"][i], row_metrics,
+                f"product #{i}")
+
+
 # --- unknown is null, never false ---------------------------------------------
 
 def test_unknown_knob_serialises_as_null_not_false(b, knobs):
