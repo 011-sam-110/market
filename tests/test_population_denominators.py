@@ -5,21 +5,28 @@ Two figures on the population page divided by a hardcoded `67`:
     population_html.py:765   _of(s["leaves"], 67, "leaves swept")
     population_html.py:1209  _of(p["leaves_touched"], 67, "leaves touched")
 
-`67` is not the size of anything this project sweeps. The in-scope catalogue
-(`catalog_ebay.top_level_of()`) holds 43 leaves and the 2026-08-28 pass swept
-all 43 of them, so the constant is wrong in the direction that flatters the
-page: a seller present in every leaf we look at renders as "43 / 67 leaves
-swept" -- 64%, read as a trader with partial reach, when the truthful figure
-is 100% and that seller is in the whole market.
+`67` was not invented -- and an earlier version of this docstring wrongly
+said it was "the size of nothing this project sweeps", confusing the 43
+category hubs the sweep VISITS (the `shard` prefix) with the leaves listings
+actually LAND in (`leaf_category_id`), which are finer-grained. Counted on
+the 2026-08-28 snapshot, `count(DISTINCT leaf_category_id)` is exactly 67.
+Somebody measured it correctly and then froze it.
 
-That is worse than a missing number. A denominator's entire job here is to
-say how much of the whole a part represents (module rule: "a figure never
-travels without the denominator it was computed over"), and a denominator
-nobody counted quietly rescales every share on the panel.
+Freezing it is the defect, and the next day's sweep is what proves it: on
+2026-08-29 the same 43 hubs, swept with identical parameters, returned
+listings across 101 distinct leaves. Every breadth figure on the panel was
+therefore about to be divided by a denominator 34 leaves too small -- a
+seller in 80 leaves rendering as "n=80 of 67", a share above 100%, and one in
+all 101 reading as though it covered two thirds of the market.
+
+A denominator's entire job here is to say how much of the whole a part
+represents (module rule: "a figure never travels without the denominator it
+was computed over"). One that was true on the day it was typed and is never
+recomputed silently rescales every share on the panel.
 
 These tests pin the denominator to the data. They are deliberately written
-against a store whose leaf count is NEITHER 43 nor 67, so neither the old
-constant nor a new constant swapped in for it can pass: the only way through
+against a store whose leaf count is NEITHER 67 nor 101, so no constant --
+the old one or a new one swapped in for it -- can pass: the only way through
 is to count what is actually there.
 """
 
