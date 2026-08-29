@@ -50,11 +50,29 @@ from datetime import UTC, datetime
 from phoneloop.knobs import Knobs
 
 # The window str_window_bp claims to measure (spec section 6: "Sigma
-# Delta-sold(30d)"). Not read anywhere in this module's arithmetic -- the
-# window boundary is enforced by which two snapshot dates produced `deltas`,
-# a decision `phoneloop.snapshots.difference` makes, not this module. Kept
-# here only as the documented intent of the figure.
+# Delta-sold(30d)"), and the window `knobs.str_threshold_bp` was set for.
+#
+# The window boundary itself is enforced by which two snapshot dates produced
+# `deltas` -- a decision `phoneloop.snapshots.difference` makes, not this
+# module. But `check()` DOES read this now, to refuse a comparison between a
+# figure measured over one night and a threshold meant for thirty days. It
+# used to be documentation only, and the comment here admitted as much; that
+# was the bug (see MIN_COMPARABLE_WINDOW_FRACTION).
 STR_WINDOW_DAYS = 30
+
+# How much of STR_WINDOW_DAYS a measured window must cover before
+# `str_window_bp` may be judged against `knobs.str_threshold_bp` at all.
+#
+# A judgement call, stated here rather than buried at the call site. The
+# direction of the error is what settles it: a short window under-reads
+# accumulated sales by construction, so the wrong answer it produces is a
+# confident FAIL -- which a reader takes as "this niche has no demand"
+# rather than "we measured it for one night". 0.8 leaves room for a couple
+# of missed nights inside a nominal 30-day window (the machine sleeps; see
+# the scheduling notes) without turning a 24- or 25-day window into an
+# unknown, while still refusing the 1-day window that the daily schedule
+# actually produces on its second night.
+MIN_COMPARABLE_WINDOW_FRACTION = 0.8
 
 _NEW_LISTING_DAYS = 7
 _NEW_ACCOUNT_DAYS = 365
@@ -83,8 +101,29 @@ def _median_int(values: Sequence[int]) -> int | None:
     return (s[mid - 1] + s[mid] + 1) // 2
 
 
+def _median_float(values: Sequence[float]) -> float | None:
+    """Median of a float sample, no rounding. Separate from `_median_int`
+    because that one rounds half up to stay an integer, which is right for
+    pence and wrong for a span of days."""
+    if not values:
+        return None
+    s = sorted(values)
+    n = len(s)
+    mid = n // 2
+    if n % 2 == 1:
+        return s[mid]
+    return (s[mid - 1] + s[mid]) / 2.0
+
+
 def _coverage(denominator: int, n_listings: int) -> float:
     return denominator / n_listings if n_listings else 0.0
+
+
+def _fmt_days(days: float | None) -> str:
+    """A window length as it should read on a board row: "1", "1.5", "30"."""
+    if days is None:
+        return "?"
+    return f"{days:g}"
 
 
 @dataclass(frozen=True)
@@ -145,6 +184,17 @@ class Metrics:
     new_account_share: float | None       # accounts under a year old
     new_account_denominator: int
 
+    # How long a window `str_window_bp` actually spans, in days -- the median
+    # of the per-listing elapsed times that fed it. Appended at the END with
+    # a default because no other field carries one and `compute()` builds
+    # Metrics by keyword, so adding it here breaks no existing caller.
+    #
+    # Load-bearing, not decorative: `check()` compares it against
+    # STR_WINDOW_DAYS and withholds the sell-through verdict when the window
+    # is materially shorter. `None` means "no windowed figure" or "the window
+    # length is unknown" -- both of which are also grounds for withholding.
+    str_window_days: float | None = None
+
 
 def compute(rows: Sequence[Mapping], *,
             now: datetime | None = None,
@@ -186,6 +236,7 @@ def compute(rows: Sequence[Mapping], *,
 
     # --- demand, windowed -----------------------------------------------------
     window_deltas: list[int] = []
+    window_days_seen: list[float] = []
     velocity_win_terms: list[float] = []
     if deltas:
         for r in rows:
@@ -196,9 +247,15 @@ def compute(rows: Sequence[Mapping], *,
             if delta_sold is None:
                 continue
             window_deltas.append(delta_sold)
+            if delta_days is not None:
+                # The MEDIAN of these, not the max: a single listing whose
+                # two observations happened to straddle an extra sweep would
+                # otherwise stretch the reported window for the whole group.
+                window_days_seen.append(float(delta_days))
             if delta_days and delta_days > 0:
                 velocity_win_terms.append(delta_sold / delta_days)
 
+    str_window_days = _median_float(window_days_seen)
     str_window_denominator = len(window_deltas)
     if window_deltas:
         # Sigma delta-sold / denominator, as a fraction, x100 for a percent
@@ -318,6 +375,7 @@ def compute(rows: Sequence[Mapping], *,
         feedback_median_n=feedback_median_n,
         new_account_share=new_account_share,
         new_account_denominator=new_account_denominator,
+        str_window_days=str_window_days,
     )
 
 
@@ -389,12 +447,33 @@ def check(m: Metrics, knobs: Knobs, *,
                  "comparable to the window threshold",
         ))
     else:
+        # A windowed figure exists -- but a window is only comparable to
+        # knobs.str_threshold_bp if it is the window that threshold was set
+        # for. A daily schedule produces a ONE-DAY window on its second
+        # night, and comparing one night of accumulated sales against a
+        # 30-day bar returns a confident FAIL for almost every niche. That is
+        # the same error as comparing str_lifetime to the threshold, and the
+        # same error as calling a zero denominator False: an unknown reported
+        # as a number. Withheld here, with both window lengths named, rather
+        # than answered.
+        min_days = STR_WINDOW_DAYS * MIN_COMPARABLE_WINDOW_FRACTION
+        if m.str_window_days is None:
+            window_note = (f"window length unknown - the {STR_WINDOW_DAYS}-day "
+                          "threshold is not comparable to a window nobody can "
+                          "measure")
+        elif m.str_window_days < min_days:
+            window_note = (f"{_fmt_days(m.str_window_days)}-day window against a "
+                          f"threshold intended for {STR_WINDOW_DAYS} days - "
+                          "not comparable")
+        else:
+            window_note = ""
         results.append(KnobResult(
             knob="sell_through", value=m.str_window_bp, threshold=knobs.str_threshold_bp,
-            passed=m.str_window_bp >= knobs.str_threshold_bp,
+            passed=(None if window_note
+                    else m.str_window_bp >= knobs.str_threshold_bp),
             denominator=m.str_window_denominator,
             coverage=_coverage(m.str_window_denominator, m.n_listings),
-            note="",
+            note=window_note or f"{_fmt_days(m.str_window_days)}-day window",
         ))
 
     # 3 -- retail price range, landed. Judged on price_median_pence (the
