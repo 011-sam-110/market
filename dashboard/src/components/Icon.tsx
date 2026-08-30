@@ -9,6 +9,8 @@
  * All paths are drawn on a 24 grid at 1.6 stroke, square-cut, no fills.
  */
 
+import type { ReactElement } from "react";
+
 export type IconName =
   | "shortlist"
   | "console"
@@ -17,7 +19,7 @@ export type IconName =
   | "coverage"
   | "trends";
 
-const PATHS: Record<IconName, JSX.Element> = {
+const PATHS: Record<IconName, ReactElement> = {
   // a fanfold sheet with a ruled entry on it
   shortlist: (
     <>
