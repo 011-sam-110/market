@@ -30,7 +30,9 @@
 
 @media (min-width: 700px) {
   .record__facts {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    /* The lead fact takes the wider column, because its figure is set at
+     * --t-lead and four equal columns would clip it. */
+    grid-template-columns: 1.55fr repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -53,6 +55,17 @@
   font-weight: 600;
   letter-spacing: -0.03em;
   line-height: 1.05;
+}
+
+/* Listings read is the question the operator opens this board to ask, so it
+ * is the one figure the head is composed around. */
+.record__fact--lead dd {
+  font-size: var(--t-lead);
+  letter-spacing: -0.035em;
+}
+
+.record__fact--lead {
+  border-top-width: var(--heavy);
 }
 
 .record__of {
@@ -98,6 +111,17 @@
  * a small-caps label hard against the last line of the prose above it. */
 p + .figure {
   margin-top: var(--s5);
+}
+
+/* The reading a withheld field still holds. It prints under the stamp
+ * rather than in place of it, so the board hides no measurement and no
+ * uncomparable number sits at headline scale. */
+.figure__measured {
+  display: block;
+  margin-top: var(--s2);
+  font-family: var(--face-narrow);
+  font-size: var(--t-label);
+  color: var(--withheld);
 }
 
 .figure__against {

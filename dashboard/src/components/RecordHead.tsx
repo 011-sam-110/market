@@ -27,7 +27,7 @@ export function RecordHead({ bundle }: { bundle: Bundle }) {
       </div>
 
       <dl className="record__facts">
-        <div className="record__fact">
+        <div className="record__fact record__fact--lead">
           <dt>Listings read</dt>
           <dd>{count(manifest.latest.listings)}</dd>
         </div>

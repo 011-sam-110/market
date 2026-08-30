@@ -142,6 +142,11 @@ p {
   padding: var(--s3) var(--s3) var(--s2);
   border-top: var(--hair) solid var(--rule);
   min-width: 0;
+  /* The stamp inside a field is sized against the field, not the viewport.
+   * Six knob fields share one row, so a stamp set from a viewport unit
+   * overflowed its column and printed WITHHELD across the neighbouring
+   * knob's reading at 1440px. */
+  container-type: inline-size;
 }
 
 .field__figure {
@@ -199,6 +204,23 @@ p {
   transform: rotate(-2.2deg);
   transform-origin: left center;
   white-space: nowrap;
+}
+
+/* The stamp stands in for a figure, so it is set at the size of the figure
+ * it replaces. Two sizes below the figure itself, because the word is six
+ * characters of narrow caps and a 38px WITHHELD would not fit a knob field
+ * at 390px — but far enough above the micro floor that absence never reads
+ * as the quiet state. The border and the tilt scale with it. */
+.stamp--figure {
+  font-size: clamp(var(--t-micro), 11.5cqi, var(--t-head));
+  border-width: 2.5px;
+  padding: 0.12em 0.4em 0.08em;
+}
+
+.stamp--record {
+  font-size: clamp(var(--t-label), 9cqi, var(--t-figure));
+  border-width: 3px;
+  padding: 0.1em 0.38em 0.06em;
 }
 
 .stamp--fail {

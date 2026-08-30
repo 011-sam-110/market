@@ -29,9 +29,34 @@
       bar (#DBE6D7) that continuous-feed stationery used to keep a reader's eye
       on one row across a wide sheet — here it does the same job on a phone.
       Hairline rules (#8E9C93) box every figure. Ink is carbon (#141D17), never
-      pure black. Two non-paper colours exist and both are verdicts: a violet
-      rubber stamp (#5B4B8A) for WITHHELD and a stamp red (#B3352B) for FAIL. No
-      third accent is available, so nothing decorative can borrow one.
+      pure black. A colour on this page is always a claim about evidence, and
+      nothing decorative may borrow one.
+
+      OWN-WORLD, AMENDED 30 Aug 2026 — the palette, after validation
+      This clause read "two non-paper colours exist and both are verdicts:
+      violet (#5B4B8A) for WITHHELD and a stamp red (#B3352B) for FAIL". It
+      was written before any colour went through the dataviz validator, and
+      the validator is the authority on colour. Three things changed and the
+      contract records them rather than letting the build diverge in silence.
+
+      · The board carries THREE verdicts, not two. Failures and withholds are
+        counted separately and are never summed, so a cleared knob needs its
+        own colour. Green (#2E7D4F) is PASS. Without it the department bars
+        have nothing for the toys_games outage to fail against.
+      · FAIL is #A8302A as text (6.13:1 on paper) and #C24236 as a chart fill
+        (4.63:1). #B3352B cleared neither role at both contrasts.
+      · Two marks are not verdicts and are declared as such: ochre (#B0821F)
+        means "a reading exists but is bounded", which is a fourth delta
+        bucket, and the five-step green ramp (--cov-1..5) encodes magnitude.
+        A sequential ramp is one hue, light to dark. It is not an accent and
+        nothing may borrow it either.
+
+      The four categorical marks were validated together against this paper:
+        node scripts/validate_palette.js "#5B4B8A,#C24236,#2E7D4F,#B0821F"           --mode light --surface "#F3F5EF" --pairs all
+      They land the deutan pair green↔red at ΔE 6.8, inside the 6–8 band that
+      is legal ONLY with secondary encoding, so every four-bucket mark on this
+      board also carries a direct label and its own hatch. Remove either one
+      and this palette stops being compliant.
 
       STORY
       The operator opens this most mornings on a phone to learn whether the

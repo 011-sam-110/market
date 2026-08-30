@@ -52,11 +52,23 @@ export function KnobField({ knob, population, binding = false }: KnobFieldProps)
         population={population}
         coverage={knob.coverage}
         note={knob.note}
+        withheld={verdict === "withheld"}
         against={
           <span className="knob-field__against">
-            <span className="knob-field__verdict">{verdictLabel(verdict)}</span>
-            <span aria-hidden="true"> · </span>
+            {/* The stamp already carries the word WITHHELD at figure scale,
+              * so repeating it here would print the verdict twice in one
+              * field. A cleared or failed knob still needs its word, because
+              * nothing else in the field says which way it went. */}
+            {verdict === "withheld" ? null : (
+              <>
+                <span className="knob-field__verdict">
+                  {verdictLabel(verdict)}
+                </span>
+                <span aria-hidden="true"> · </span>
+              </>
+            )}
             <span className="knob-field__threshold">
+              {verdict === "withheld" ? "against " : ""}
               {knobThreshold(knob.knob, knob.threshold)}
             </span>
           </span>

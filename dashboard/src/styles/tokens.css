@@ -4,9 +4,15 @@
  *
  * 1. There are exactly three colours that are not paper, and all three are
  *    verdicts: violet is WITHHELD, red is FAIL, green is PASS. Ochre is the
- *    fourth chart slot and means "a reading exists but is bounded". Nothing
+ *    fourth chart slot and means "a reading exists but is bounded". The
+ *    five-step green ramp encodes magnitude and is not an accent. Nothing
  *    decorative may borrow any of them, because a coloured thing on this page
  *    is a claim about evidence.
+ *
+ *    This is not this file's rule to make. The direction contract in
+ *    index.html states it, and the amendment dated 30 Aug 2026 records why
+ *    the palette is wider than the contract first said. Read that before
+ *    changing anything below.
  *
  * 2. Every colour used as a chart mark was run through the dataviz validator
  *    against this paper surface, not chosen by eye:
@@ -70,6 +76,13 @@
   --face-narrow: "Archivo Narrow", "Archivo Variable", system-ui, sans-serif;
 
   --t-record: clamp(2.75rem, 11vw, 5.25rem); /* the figure IS the material */
+  /* The record head's load-bearing figure. It sits between a knob reading and
+   * a view's own hero on purpose: the head answers "did the overnight run
+   * change anything" on every view, so it has to lead its own block without
+   * out-shouting the answer the view below it exists to give. Four figures at
+   * one size is a KPI strip, which is the category default this board
+   * refuses. */
+  --t-lead: clamp(2.25rem, 7vw, 3.4rem);
   --t-figure: clamp(1.6rem, 5.2vw, 2.35rem); /* a knob's reading */
   --t-head: clamp(1.35rem, 3.4vw, 1.7rem);
   --t-title: 1.125rem; /* a product title, at reading size */

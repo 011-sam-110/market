@@ -49,8 +49,20 @@ function HatchDefs({
         const id = `${prefix}-${i}`;
         if (spec.angle === null && !("dots" in spec && spec.dots)) {
           return (
-            <pattern key={id} id={id} width="1" height="1">
-              <rect width="1" height="1" fill={color} />
+            // `patternUnits` is not optional here. Without it the tile
+            // defaults to objectBoundingBox while the rect inside it stays in
+            // user space, so a 1x1 rect painted a single speck at the corner
+            // and left the rest of the segment transparent. The solid slot is
+            // always the first segment of a Composition, so the largest group
+            // on the bar was the one that did not render.
+            <pattern
+              key={id}
+              id={id}
+              width="4"
+              height="4"
+              patternUnits="userSpaceOnUse"
+            >
+              <rect width="4" height="4" fill={color} />
             </pattern>
           );
         }

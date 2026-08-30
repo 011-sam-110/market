@@ -188,12 +188,14 @@ function coverage(denominator: number, nListings: number): number {
 
 /** Python's `f"{days:g}"`.
  *
- * The window length is interpolated into a note string that the golden
- * fixture compares character for character, so "1.18729" has to come out as
- * "1.18729" and "30.0" as "30". `%g` is six significant digits with trailing
- * zeros stripped, falling to exponential outside 10^-4 .. 10^6 — a range no
- * window length reaches, but implemented anyway so this never silently
- * diverges if one ever does. */
+ * Figures are interpolated into note strings that the golden fixture compares
+ * character for character, so "30.0" has to come out as "30". `%g` is six
+ * significant digits with trailing zeros stripped, falling to exponential
+ * outside 10^-4 .. 10^6 — a range nothing on this board reaches, but
+ * implemented anyway so this never silently diverges if one ever does.
+ *
+ * A window length does not reach this function directly. It goes through
+ * `fmtDays` below, which rounds first. */
 export function formatG(x: number | null): string {
   if (x === null) return "?";
   if (!Number.isFinite(x)) return String(x);
@@ -211,6 +213,19 @@ export function formatG(x: number | null): string {
 
 function stripTrailingZeros(s: string): string {
   return s.includes(".") ? s.replace(/0+$/, "").replace(/\.$/, "") : s;
+}
+
+/** A window length as it should read on a board row: "1", "1.5", "30".
+ *
+ * Mirrors `phoneloop.metrics._fmt_days`. Read the note there before touching
+ * this: the hundredths are taken with integer arithmetic because Python's
+ * `round` is round-half-even and `Math.round` is round-half-up, and the two
+ * implementations have to agree on every value the golden fixture records.
+ * `Math.round(x)` and Python's `int(x + 0.5)` agree on every positive x. */
+export function fmtDays(days: number | null): string {
+  if (days === null) return "?";
+  if (days < 0) return formatG(days);
+  return formatG(Math.round(days * 100) / 100);
 }
 
 export interface CheckArgs {
@@ -291,7 +306,7 @@ export function check(
         "measure";
     } else if (m.str_window_days < minDays) {
       windowNote =
-        `${formatG(m.str_window_days)}-day window against a ` +
+        `${fmtDays(m.str_window_days)}-day window against a ` +
         `threshold intended for ${STR_WINDOW_DAYS} days - ` +
         "not comparable";
     } else {
@@ -304,7 +319,7 @@ export function check(
       passed: windowNote ? null : m.str_window_bp >= knobs.str_threshold_bp,
       denominator: m.str_window_denominator,
       coverage: coverage(m.str_window_denominator, m.n_listings),
-      note: windowNote || `${formatG(m.str_window_days)}-day window`,
+      note: windowNote || `${fmtDays(m.str_window_days)}-day window`,
     });
   }
 

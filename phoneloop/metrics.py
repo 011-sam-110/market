@@ -120,10 +120,23 @@ def _coverage(denominator: int, n_listings: int) -> float:
 
 
 def _fmt_days(days: float | None) -> str:
-    """A window length as it should read on a board row: "1", "1.5", "30"."""
+    """A window length as it should read on a board row: "1", "1.5", "30".
+
+    Rounded to hundredths first. A window is a difference between two
+    timestamps, so `%g` alone printed "0.767448-day window" on a board whose
+    whole argument is that a figure must not claim more than it measured.
+    Six significant digits from two snapshots is that same fault.
+
+    The rounding is written as integer arithmetic on purpose. `dashboard/src/
+    lib/knobs.ts` reimplements this function, and `round()` there would be
+    round-half-up while `round()` here is round-half-even. `Math.round` and
+    `int(x + 0.5)` agree on every positive value, so the two stay identical.
+    """
     if days is None:
         return "?"
-    return f"{days:g}"
+    if days < 0:
+        return f"{days:g}"
+    return f"{int(days * 100 + 0.5) / 100:g}"
 
 
 @dataclass(frozen=True)

@@ -276,6 +276,11 @@
   inset: 0 auto 0 0;
   display: block;
   border-radius: 0 4px 4px 0;
+  /* The mark spec wants a 4px rounded data-end anchored to the baseline, and
+   * `transform: scaleX()` stretches that cap into an ellipse. This fill is
+   * out of flow, so a width change lays out one box and reflows nothing
+   * around it, and it moves only when a knob moves. */
+  /* impeccable-disable-next-line layout-transition -- scaleX distorts the 4px data-end */
   transition: width var(--dur) var(--ease-out);
 }
 
