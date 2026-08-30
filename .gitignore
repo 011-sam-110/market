@@ -26,3 +26,15 @@ cookies.txt
 
 .vercel
 .env*
+
+# Local working artifacts, none of which are the project.
+#   .claude/         session state and agent scratch
+#   .impeccable/     design-skill state
+#   .review/         screenshot round output (tools/shoot.mjs)
+#   graphify-out/    graphify skill output
+# tsbuildinfo is a typecheck cache and changes on every run.
+.claude/
+.impeccable/
+.review/
+graphify-out/
+dashboard/tsconfig.tsbuildinfo

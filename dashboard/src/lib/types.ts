@@ -266,9 +266,14 @@ export interface CoveragePayload {
       leaves_swept: number;
       leaves_touched: number;
       n_niches: number;
+      /** Business listings wanted for each leaf. 30 today. */
+      target: number;
       needed_business: number;
       needed_listings: number;
       multiple: number;
+      /** Niches whose knob denominators are all 0. The board must not read
+       * this as 34 niches that scored zero. It is 34 niches nobody measured. */
+      zero_denominator: number;
       closing: string;
       rows: Record<string, number | string>[];
     };

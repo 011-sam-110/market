@@ -93,6 +93,13 @@
   min-width: 0;
 }
 
+/* `p` carries no margin on this board, so the block that follows a sentence
+ * sets the gap itself. A figure that follows one used to set none, which put
+ * a small-caps label hard against the last line of the prose above it. */
+p + .figure {
+  margin-top: var(--s5);
+}
+
 .figure__against {
   display: block;
   margin-top: var(--s2);

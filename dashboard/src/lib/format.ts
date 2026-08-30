@@ -205,8 +205,11 @@ export function knobThreshold(
     case "delivery":
       return `≤ ${threshold} days`;
     case "seller_quality": {
+      // The rating count carries its unit, and the comparison holds together
+      // on one line. Without either, a narrow column printed "≥ 95% on ≥"
+      // and left a bare "50" on the line below, which names nothing.
       const [fb, n] = threshold as number[];
-      return `≥ ${bpPercent(fb ?? 0, 1)} on ≥ ${count(n ?? 0)}`;
+      return `≥ ${bpPercent(fb ?? 0, 1)} on ≥ ${count(n ?? 0)} ratings`;
     }
     case "saturation":
       return `≤ ${threshold} sellers`;

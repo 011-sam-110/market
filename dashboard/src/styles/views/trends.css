@@ -1,0 +1,325 @@
+/* The Change view.
+ *
+ * This file adds no colour, no typeface and no type scale. Each rule arranges
+ * the existing vocabulary: .field, .den, .stamp, .entry, .fanfold and
+ * .locked. Two containers are new. One is a ledger table. One is a numbered
+ * list that shows a calculation.
+ *
+ * This file defines no line, no arrow, no sparkline and no direction badge.
+ * The store holds two snapshots. Two snapshots make one difference. The view
+ * therefore has no form that can state a direction over time.
+ */
+
+/* --- the standing rule at the top of the view -------------------------- */
+
+.trends__discipline {
+  margin-top: var(--s4);
+  padding: var(--s3) var(--s4);
+  background: var(--withheld-wash);
+  border-left: 1px solid var(--withheld);
+  max-width: var(--measure);
+}
+
+.trends__discipline p + p {
+  margin-top: var(--s2);
+}
+
+/* --- a sub-heading inside a panel -------------------------------------- */
+/* This heading ranks one step below .panel__title. A panel can then hold two
+ * related blocks. Neither block reads as a new section. */
+
+.trends-sub {
+  margin-top: var(--s5);
+  font-size: var(--t-body);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.trends-sub + .panel__note,
+.trends-sub + .chart__caption {
+  margin-top: var(--s2);
+}
+
+/* --- the arithmetic chain ---------------------------------------------- */
+/* Each line states one step of a calculation. The reader can check every
+ * step. The count stays on its own line under the step. */
+
+.trends-chain,
+.trends-steps {
+  list-style: none;
+  margin: var(--s4) 0 0;
+  padding: 0;
+}
+
+.trends-chain > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--s1) var(--s4);
+  padding: var(--s3) 0 var(--s2);
+  border-top: var(--hair) solid var(--rule-faint);
+}
+
+.trends-chain > li:first-child {
+  border-top-color: var(--rule);
+}
+
+.trends-chain__label {
+  font-size: var(--t-label);
+  max-width: 52ch;
+}
+
+.trends-chain__value {
+  font-size: var(--t-title);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.trends-chain__den {
+  grid-column: 1 / -1;
+}
+
+/* --- the countdown, printed as working ---------------------------------- */
+/* The view derives a date. The view shows each step of that derivation. */
+
+.trends-steps {
+  counter-reset: trends-step;
+}
+
+.trends-steps > li {
+  display: grid;
+  grid-template-columns: 2.5ch minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--s1) var(--s3);
+  padding: var(--s3) 0 var(--s2);
+  border-top: var(--hair) solid var(--rule-faint);
+  counter-increment: trends-step;
+}
+
+.trends-steps > li::before {
+  content: counter(trends-step);
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.trends-steps__label {
+  font-size: var(--t-label);
+  max-width: 48ch;
+}
+
+.trends-steps__value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.trends-steps__value--derived {
+  color: var(--withheld);
+}
+
+.trends-steps__caveat {
+  grid-column: 2 / -1;
+  font-size: var(--t-micro);
+  color: var(--ink-2);
+  line-height: 1.45;
+  max-width: 58ch;
+}
+
+/* --- figures the view must never add together --------------------------- */
+
+.trends-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--s5);
+  margin-top: var(--s4);
+}
+
+@media (min-width: 760px) {
+  .trends-pair--three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* --- the refused figure -------------------------------------------------- */
+
+.trends-refusal {
+  margin-top: var(--s4);
+  padding: var(--s4);
+}
+
+.trends-refusal__where {
+  margin-top: var(--s2);
+  font-size: var(--t-label);
+  color: var(--ink-2);
+}
+
+.trends-refusal__stamp {
+  display: block;
+  margin: var(--s4) 0 var(--s2);
+}
+
+.trends-refusal__reason {
+  display: block;
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--withheld);
+}
+
+/* --- the pipeline's own words ------------------------------------------- */
+/* The view never rewrites a sentence the payload wrote. This block marks
+ * quoted text as quoted text. */
+
+.trends-quote {
+  margin-top: var(--s3);
+  padding-left: var(--s4);
+  border-left: 1px solid var(--rule);
+  color: var(--ink-2);
+  font-size: var(--t-label);
+  max-width: var(--measure);
+}
+
+.trends-quote p + p {
+  margin-top: var(--s2);
+}
+
+/* --- ledger table -------------------------------------------------------- */
+
+.trends-ledger {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 26rem;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.trends-ledger th,
+.trends-ledger td {
+  text-align: left;
+  padding: var(--s2) var(--s4) var(--s2) 0;
+  border-top: var(--hair) solid var(--rule-faint);
+  font-size: var(--t-label);
+  vertical-align: baseline;
+}
+
+.trends-ledger thead th {
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  border-top-color: var(--rule);
+}
+
+.trends-ledger .is-num {
+  text-align: right;
+  padding-right: 0;
+  font-weight: 600;
+}
+
+.trends-ledger tbody tr:nth-child(even) {
+  background: var(--bar);
+}
+
+/* --- locked panels ------------------------------------------------------- */
+
+.trends-locks {
+  display: grid;
+  gap: var(--s4);
+  margin-top: var(--s4);
+}
+
+@media (min-width: 860px) {
+  .trends-locks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trends-locks .locked {
+    max-width: none;
+  }
+}
+
+/* --- panels already unlocked --------------------------------------------- */
+
+.trends-open {
+  list-style: none;
+  margin: var(--s4) 0 0;
+  padding: 0;
+  max-width: var(--measure);
+}
+
+.trends-open > li {
+  padding: var(--s3) 0;
+  border-top: var(--hair) solid var(--rule-faint);
+}
+
+.trends-open__at {
+  display: block;
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pass);
+}
+
+.trends-open__what {
+  margin-top: var(--s1);
+  font-size: var(--t-label);
+  color: var(--ink-2);
+}
+
+/* --- blockers ------------------------------------------------------------ */
+/* The date ledger names the reason no third snapshot arrives. That reason
+ * fails a stated condition, so it takes the fail colour. */
+
+.trends-blockers {
+  margin: var(--s4) 0 0;
+  padding: var(--s3) var(--s4);
+  list-style: none;
+  background: var(--fail-wash);
+  border-left: 1px solid var(--fail);
+  max-width: var(--measure);
+}
+
+.trends-blockers > li + li {
+  margin-top: var(--s3);
+}
+
+.trends-blockers strong {
+  color: var(--fail);
+}
+
+/* --- product movers, on the fanfold -------------------------------------- */
+/* These rows reuse the shortlist entry vocabulary without change. The title
+ * reads at reading size. The figure sits to the right of the title. The count
+ * sits under the figure. */
+
+.trends-movers .entry {
+  padding-top: var(--s4);
+  padding-bottom: var(--s4);
+}
+
+.trends-movers .entry__score b {
+  white-space: nowrap;
+}
+
+.trends-movers--decrease .entry__score b {
+  color: var(--fail);
+}
+
+/* --- actions -------------------------------------------------------------- */
+
+.trends-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3);
+  margin-top: var(--s4);
+}

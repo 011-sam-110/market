@@ -135,6 +135,18 @@ function Board({
     [knobState.query, route.view],
   );
 
+  // A hash change is a same-document navigation, so the browser keeps the
+  // scroll offset. Six long views and one shared scroll position means a
+  // reader three screens into the shortlist arrives three screens into
+  // coverage, past the heading that says what coverage is.
+  //
+  // Keyed on the view alone. A filter box writes to the query string on every
+  // keystroke, and a reset there would throw the reader back to the top of
+  // the page while they type.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [route.view]);
+
   const View = VIEW_COMPONENTS[route.view];
   const props: ViewProps = {
     bundle,

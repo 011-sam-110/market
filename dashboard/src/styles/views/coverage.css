@@ -1,0 +1,503 @@
+/* Coverage and gaps.
+ *
+ * This view prints tables. The base sheet carries no table vocabulary, so
+ * this file adds one. It adds nothing else. Every colour is a token from
+ * tokens.css, and no rule here invents a colour.
+ *
+ * The fanfold band does its original job on these tables. It holds the eye on
+ * one row across a sheet that is wider than a phone.
+ */
+
+/* --- the lead panel ---------------------------------------------------- */
+
+/* The outage is the reason this page exists, so it opens the view above the
+ * first rule rather than below it. */
+.cov-lead {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.cov-lead__figure {
+  border-top: var(--heavy) solid var(--ink);
+}
+
+.cov-say {
+  margin-top: var(--s4);
+  color: var(--ink-2);
+  font-size: var(--t-body);
+}
+
+.cov-say + .cov-say {
+  margin-top: var(--s3);
+}
+
+.cov-say--stamped {
+  color: var(--withheld);
+}
+
+/* --- a pair of readings, side by side on a wide sheet ------------------ */
+
+.cov-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0 var(--s5);
+  margin-top: var(--s5);
+}
+
+@media (min-width: 700px) {
+  .cov-pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cov-pair--three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* --- the dimension switch ---------------------------------------------- */
+
+.cov-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin: var(--s4) 0;
+}
+
+.cov-switch .btn {
+  min-height: 44px;
+  padding: var(--s2) var(--s3);
+}
+
+.cov-switch .btn[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.cov-asks {
+  margin-bottom: var(--s4);
+  color: var(--ink-2);
+  font-size: var(--t-label);
+}
+
+/* --- tables ------------------------------------------------------------ */
+
+.cov-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--t-micro);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* A wide table must scroll inside .scroll-x. The min-width is what makes it
+ * scroll instead of crushing every column on a phone. */
+.cov-table--wide {
+  min-width: 46rem;
+}
+
+.cov-table caption {
+  caption-side: top;
+  text-align: left;
+  padding-bottom: var(--s3);
+  color: var(--ink-2);
+  font-size: var(--t-label);
+  max-width: var(--measure);
+}
+
+.cov-table th,
+.cov-table td {
+  padding: var(--s2) var(--s3) var(--s2) 0;
+  text-align: left;
+  vertical-align: baseline;
+  border-bottom: var(--hair) solid var(--rule-faint);
+}
+
+.cov-table thead th {
+  border-bottom: var(--hair) solid var(--rule);
+  font-family: var(--face-narrow);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.cov-table tbody tr:nth-child(even) {
+  background: var(--bar);
+}
+
+.cov-table__name {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cov-table__num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.cov-table__wide-cell {
+  min-width: 18rem;
+  white-space: normal;
+}
+
+/* The first column stays in view while the reader scrolls the rest. The
+ * background must be opaque, and it must follow the fanfold band. */
+.cov-table--sticky th[scope="row"] {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  padding-right: var(--s4);
+  background: var(--paper);
+}
+
+.cov-table--sticky tbody tr:nth-child(even) th[scope="row"] {
+  background: var(--bar);
+}
+
+.cov-table__band {
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.cov-table__band--dead,
+.cov-table__band--tier2 {
+  color: var(--withheld);
+}
+
+/* The meter reuses the bar track from chart.css so one mark means one thing
+ * across the board. */
+.cov-meter {
+  display: block;
+  position: relative;
+  width: 5rem;
+  height: 8px;
+  background: var(--paper-sunk);
+  border-radius: 2px;
+}
+
+.cov-meter > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  background: var(--cov-3);
+  border-radius: 0 4px 4px 0;
+}
+
+.cov-meter--none > span {
+  background: var(--withheld);
+}
+
+.cov-zero {
+  color: var(--ink-3);
+}
+
+.cov-more {
+  margin-top: var(--s2);
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* --- a tier group in the ladder ---------------------------------------- */
+
+.cov-group {
+  margin-top: var(--s5);
+}
+
+.cov-group__head {
+  font-size: var(--t-title);
+  font-weight: 700;
+}
+
+.cov-group__note {
+  margin-top: var(--s2);
+  margin-bottom: var(--s3);
+  color: var(--ink-2);
+  font-size: var(--t-label);
+  max-width: var(--measure);
+}
+
+.cov-group--tier2 .cov-group__head,
+.cov-group--dead .cov-group__head {
+  color: var(--withheld);
+}
+
+/* --- key and value lists ----------------------------------------------- */
+
+.cov-kv {
+  margin: var(--s3) 0 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+@media (min-width: 620px) {
+  .cov-kv--split {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--s5);
+  }
+}
+
+.cov-kv__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s2) var(--s4);
+  padding: var(--s2) 0;
+  border-bottom: var(--hair) solid var(--rule-faint);
+}
+
+.cov-kv__key {
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.cov-kv__value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.cov-kv__value--absent {
+  color: var(--withheld);
+  font-weight: 400;
+}
+
+/* --- prose the pipeline wrote itself ----------------------------------- */
+
+/* A quoted string from the payload keeps its own words. This board never
+ * rewrites a sentence the pipeline wrote about its own data. */
+.cov-quote {
+  margin-top: var(--s3);
+  padding-left: var(--s4);
+  border-left: var(--hair) solid var(--rule);
+  color: var(--ink-2);
+  font-size: var(--t-label);
+  line-height: 1.45;
+  max-width: var(--measure);
+  /* `PanelValue` prints every string field of a panel through this rule, and
+   * some of those strings are one unbreakable token: a Windows checkpoint
+   * path, a git sha, a URL. At 390px the checkpoint path pushed the whole
+   * document 94px wide and the page scrolled sideways. `anywhere` lets the
+   * break land mid-token, which is correct for a path and is the only option
+   * that does not hide a character. */
+  overflow-wrap: anywhere;
+}
+
+.cov-quote--reading {
+  border-left-color: var(--ink);
+  color: var(--ink);
+}
+
+.cov-quote__source {
+  display: block;
+  margin-bottom: var(--s1);
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.cov-list {
+  margin: var(--s3) 0 0;
+  padding-left: var(--s4);
+  color: var(--ink-2);
+  font-size: var(--t-label);
+  max-width: var(--measure);
+}
+
+.cov-list li + li {
+  margin-top: var(--s2);
+}
+
+.cov-ids {
+  margin: var(--s2) 0 0;
+  font-size: var(--t-micro);
+  color: var(--ink-2);
+  word-break: break-word;
+}
+
+/* --- a named empty state ----------------------------------------------- */
+
+/* An empty field is a finding. It is never a blank space. */
+.cov-empty {
+  display: inline-block;
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--withheld);
+}
+
+/* --- one flagged niche ------------------------------------------------- */
+
+.cov-flagged {
+  padding: var(--s4);
+  border-top: var(--hair) solid var(--rule-faint);
+}
+
+.cov-flagged__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s2) var(--s4);
+}
+
+.cov-flagged__name {
+  font-size: var(--t-title);
+  font-weight: 700;
+}
+
+.cov-flagged__rank {
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.cov-flagged__score {
+  margin-left: auto;
+  font-size: var(--t-title);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.cov-verdicts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s3);
+  margin-top: var(--s3);
+  font-size: var(--t-micro);
+}
+
+.cov-verdicts__word {
+  font-family: var(--face-narrow);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pass);
+}
+
+.cov-verdicts__knob {
+  color: var(--ink-2);
+}
+
+/* --- the contradiction blocks ------------------------------------------ */
+
+.cov-contra {
+  padding: var(--s4) 0;
+  border-top: var(--hair) solid var(--rule-faint);
+}
+
+.cov-contra__name {
+  font-size: var(--t-title);
+  font-weight: 700;
+  color: var(--fail);
+}
+
+.cov-observed {
+  margin-top: var(--s3);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s4);
+}
+
+@media (min-width: 700px) {
+  .cov-observed--split {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.cov-observed__head {
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+/* --- the index of the remaining panels --------------------------------- */
+
+.cov-index {
+  list-style: none;
+  margin: var(--s4) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+@media (min-width: 700px) {
+  .cov-index {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--s5);
+  }
+}
+
+.cov-index li {
+  padding: var(--s2) 0;
+  border-bottom: var(--hair) solid var(--rule-faint);
+  font-size: var(--t-label);
+}
+
+.cov-index .cov-index__id {
+  display: block;
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+
+/* --- one long-tail panel ----------------------------------------------- */
+
+.cov-panel__state {
+  margin-top: var(--s2);
+}
+
+.cov-field {
+  padding: var(--s4) 0 0;
+  border-top: var(--hair) solid var(--rule-faint);
+  margin-top: var(--s4);
+  min-width: 0;
+}
+
+.cov-field__key {
+  display: block;
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  margin-bottom: var(--s2);
+}
+
+.cov-field__scalar {
+  font-size: var(--t-title);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.cov-nested {
+  margin-top: var(--s3);
+  padding-left: var(--s4);
+  border-left: var(--hair) solid var(--rule-faint);
+}
+
+.cov-locks {
+  display: grid;
+  gap: var(--s4);
+  margin-top: var(--s3);
+}

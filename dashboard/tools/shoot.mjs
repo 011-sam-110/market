@@ -72,6 +72,19 @@ for (const w of WIDTHS) {
     await page.goto(`${BASE}/#/${view}`, { waitUntil: "domcontentloaded" });
     await settle(page);
 
+    // Changing the hash is a same-document navigation, so the previous view's
+    // scroll offset survives it unless the app resets it. Report that rather
+    // than quietly correct it: it is the difference between arriving at a
+    // view and arriving three screens inside one.
+    const carried = await page.evaluate(() => window.scrollY);
+    if (carried > 0) {
+      console_errors.push(
+        `[${w.name}/${view}] arriving at this view kept ${Math.round(carried)}px of the previous view's scroll`,
+      );
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForTimeout(250);
+    }
+
     await page.screenshot({ path: resolve(dir, `${view}-01-top.png`) });
 
     // Two scrolls rather than one full-page shot: the fold is where a

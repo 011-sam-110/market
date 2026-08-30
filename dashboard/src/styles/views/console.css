@@ -1,0 +1,561 @@
+/* The knob console: a load path, not six sliders in a row.
+ *
+ * Everything here is scoped under `.console` so the six views can be styled
+ * independently without one view's rule reaching into another's markup. No
+ * colour is defined in this file — every value is a token from tokens.css,
+ * and the only three non-paper colours on this board are verdicts.
+ *
+ * The one structural rule worth stating: the two counts a member carries —
+ * rows it FAILS and rows it cannot read — are drawn on separate tracks with
+ * separate scales and separate hatching, because they are different
+ * quantities measured over different denominators. Nothing in this file may
+ * ever place them end to end in one bar; a stacked bar is an addition, and
+ * that addition is the wrong answer.
+ */
+
+/* --- the setting bar -------------------------------------------------- */
+
+.console-setting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2) var(--s4);
+  padding: var(--s3) 0;
+  border-top: var(--hair) solid var(--rule);
+  border-bottom: var(--hair) solid var(--rule);
+  margin-bottom: var(--s5);
+}
+
+.console-setting__count {
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.console-setting__moved {
+  color: var(--withheld);
+}
+
+.console-setting__pending {
+  flex-basis: 100%;
+  font-size: var(--t-micro);
+  color: var(--ink-2);
+}
+
+/* --- the load --------------------------------------------------------- */
+
+.console-load__record {
+  display: block;
+  padding: var(--s4) 0 var(--s3);
+}
+
+.console-load__figure {
+  display: block;
+  font-size: var(--t-record);
+  font-weight: 700;
+  line-height: 0.92;
+  letter-spacing: -0.045em;
+  margin: var(--s2) 0 var(--s3);
+}
+
+.console-load__figure--zero {
+  /* A measured zero is not a missing figure, and on this board a blank space
+   * would be read as one. It stays ink and the sentence under it says so. */
+  color: var(--ink);
+}
+
+.console-load__why {
+  margin-top: var(--s3);
+  color: var(--ink-2);
+  max-width: var(--measure);
+}
+
+.console-load__blocked {
+  margin-top: var(--s4);
+  padding: var(--s3) var(--s4);
+  background: var(--withheld-wash);
+  border-left: 1px solid var(--withheld);
+  color: var(--withheld);
+  max-width: var(--measure);
+}
+
+.console-load__arith {
+  margin-top: var(--s4);
+  font-size: var(--t-micro);
+  color: var(--ink-2);
+  max-width: var(--measure);
+}
+
+/* --- the tie, and the path -------------------------------------------- */
+
+.console-tie {
+  margin-top: var(--s5);
+  padding: var(--s3) 0 var(--s4);
+  border-top: var(--hair) solid var(--rule);
+}
+
+.console-tie__load {
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.console-tie__binding {
+  margin-top: var(--s2);
+  max-width: var(--measure);
+}
+
+.console-path {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 var(--s4);
+  /* The spine. Every member hangs off this one line, which is the whole
+   * point: the six are one structure sharing one load, not six controls
+   * that happen to sit near each other. */
+  border-left: var(--hair) solid var(--rule);
+}
+
+@media (min-width: 700px) {
+  .console-path {
+    padding-left: var(--s5);
+  }
+}
+
+.console-member {
+  position: relative;
+  padding: var(--s4) 0 var(--s6);
+  border-top: var(--hair) solid var(--rule-faint);
+}
+
+/* The stub that ties a member back to the spine. */
+.console-member::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: calc(var(--s4) * -1);
+  width: var(--s4);
+  height: var(--hair);
+  background: var(--rule-faint);
+}
+
+@media (min-width: 700px) {
+  .console-member::before {
+    left: calc(var(--s5) * -1);
+    width: var(--s5);
+  }
+}
+
+/* The binding member carries the force, and the only heavy rule on the view
+ * says so — a top rule at 3px and a full-height bar down the spine. */
+.console-member--binding {
+  border-top: var(--heavy) solid var(--ink);
+}
+
+.console-member--binding::before {
+  top: calc(var(--heavy) * -1);
+  height: var(--heavy);
+  background: var(--ink);
+}
+
+.console-member--binding::after {
+  content: "";
+  position: absolute;
+  top: calc(var(--heavy) * -1);
+  bottom: 0;
+  left: calc(var(--s4) * -1 - 1px);
+  width: var(--heavy);
+  background: var(--ink);
+}
+
+@media (min-width: 700px) {
+  .console-member--binding::after {
+    left: calc(var(--s5) * -1 - 1px);
+  }
+}
+
+.console-member__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s2) var(--s3);
+}
+
+.console-member__number {
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.console-member__title {
+  font-size: var(--t-title);
+  font-weight: 700;
+}
+
+.console-member__carrying {
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink);
+  border-bottom: var(--heavy) solid var(--ink);
+}
+
+.console-member__question {
+  margin-top: var(--s2);
+  font-size: var(--t-label);
+  color: var(--ink-2);
+  max-width: var(--measure);
+}
+
+/* --- the two counts, which are never one ------------------------------ */
+
+.console-counts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--s4);
+  margin-top: var(--s4);
+}
+
+.console-counts .field {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.console-counts__rule {
+  grid-column: 1 / -1;
+  margin-top: var(--s2);
+  font-size: var(--t-micro);
+  color: var(--ink-2);
+  max-width: var(--measure);
+}
+
+.console-struts {
+  margin-top: var(--s3);
+}
+
+.console-strut + .console-strut {
+  margin-top: var(--s3);
+  padding-top: var(--s3);
+  border-top: var(--hair) solid var(--rule-faint);
+}
+
+.console-strut__label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.console-strut__track {
+  position: relative;
+  display: block;
+  height: 12px;
+  margin-top: var(--s1);
+  background: var(--paper-sunk);
+  border-radius: 2px;
+}
+
+.console-strut__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  border-radius: 0 4px 4px 0;
+  transition: width var(--dur) var(--ease-out);
+}
+
+.console-strut--fail .console-strut__fill {
+  background: var(--fail-mark);
+}
+
+/* Hatched, not merely violet: the withheld track must be distinguishable
+ * from the failure track without colour, on its own and in a screenshot. */
+.console-strut--withheld .console-strut__fill {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--withheld) 0 3px,
+    var(--withheld-wash) 3px 6px
+  );
+}
+
+.console-strut__scale {
+  display: block;
+  margin-top: var(--s1);
+  font-size: var(--t-micro);
+  color: var(--ink-3);
+}
+
+.console-member__reading {
+  margin-top: var(--s3);
+  font-size: var(--t-micro);
+  line-height: 1.45;
+  color: var(--withheld);
+  max-width: var(--measure);
+}
+
+.console-member__reading--carrying {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.console-member__stale {
+  margin-top: var(--s3);
+  padding: var(--s3) var(--s4);
+  background: var(--withheld-wash);
+  border-left: 1px solid var(--withheld);
+  font-size: var(--t-micro);
+  line-height: 1.45;
+  color: var(--withheld);
+  max-width: var(--measure);
+}
+
+.console-member__note {
+  margin-top: var(--s3);
+  font-size: var(--t-micro);
+  color: var(--ink-2);
+  max-width: var(--measure);
+}
+
+/* --- controls --------------------------------------------------------- */
+
+.console .control:first-of-type {
+  margin-top: var(--s4);
+}
+
+/* A 44px touch target, which the platform slider does not give on its own.
+ * The track stays a hairline; the height belongs to the thumb's reach. */
+.console input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 44px;
+  margin-top: var(--s2);
+  background: transparent;
+  cursor: pointer;
+}
+
+.console input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  background: var(--rule-faint);
+  border-radius: 2px;
+}
+
+.console input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  margin-top: -12px;
+  border-radius: 50%;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  box-shadow: var(--lift);
+}
+
+.console input[type="range"]::-moz-range-track {
+  height: 4px;
+  background: var(--rule-faint);
+  border-radius: 2px;
+}
+
+.console input[type="range"]::-moz-range-thumb {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  box-shadow: var(--lift);
+}
+
+.console input[type="range"]:disabled {
+  cursor: not-allowed;
+}
+
+.console-scale {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--s1) var(--s3);
+  font-size: var(--t-micro);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.console-raw {
+  display: block;
+  margin-top: var(--s2);
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+
+.console-moved {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2) var(--s3);
+  margin-top: var(--s3);
+  font-size: var(--t-micro);
+  color: var(--withheld);
+}
+
+.console-moved__word {
+  font-family: var(--face-narrow);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.console-outofrange {
+  margin-top: var(--s2);
+  font-size: var(--t-micro);
+  color: var(--fail);
+  max-width: var(--measure);
+}
+
+.console-gloss {
+  margin-top: var(--s2);
+  font-size: var(--t-micro);
+  line-height: 1.45;
+  color: var(--ink-2);
+  max-width: var(--measure);
+}
+
+.console-gloss--unverified,
+.console-gloss--decision {
+  color: var(--withheld);
+}
+
+/* --- the sell-through explanation ------------------------------------- */
+
+.console-window {
+  margin-top: var(--s4);
+  padding: var(--s4);
+  background: var(--paper-sunk);
+  border-left: 1px solid var(--rule);
+  max-width: var(--measure);
+}
+
+.console-window__title {
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.console-window__body {
+  margin-top: var(--s2);
+  font-size: var(--t-label);
+  line-height: 1.5;
+}
+
+.console-window__terms {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s3);
+  margin: var(--s4) 0 0;
+}
+
+.console-window__terms div {
+  border-top: var(--hair) solid var(--rule);
+  padding-top: var(--s2);
+}
+
+.console-window__terms dt {
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.console-window__terms dd {
+  margin: var(--s1) 0 0;
+  font-size: var(--t-title);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- the fee terms disclosure ----------------------------------------- */
+
+.console-fees {
+  border-top: var(--hair) solid var(--rule);
+  margin-top: var(--s6);
+}
+
+.console-fees > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-height: 56px;
+  padding: var(--s3) 0;
+  cursor: pointer;
+  font-family: var(--face-narrow);
+  font-size: var(--t-label);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.console-fees > summary::marker {
+  color: var(--ink-3);
+}
+
+.console-fees__body {
+  padding-bottom: var(--s6);
+}
+
+/* --- preset ----------------------------------------------------------- */
+
+.console-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3);
+  margin-top: var(--s4);
+}
+
+.console-link {
+  width: 100%;
+  min-height: 44px;
+  margin-top: var(--s3);
+  padding: var(--s2) var(--s3);
+  background: var(--paper-sunk);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  font-size: var(--t-micro);
+  color: var(--ink-2);
+}
+
+.console-status {
+  margin-top: var(--s3);
+  font-size: var(--t-micro);
+  line-height: 1.45;
+  color: var(--ink-2);
+  max-width: var(--measure);
+}
+
+.console-status__word {
+  font-family: var(--face-narrow);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+}

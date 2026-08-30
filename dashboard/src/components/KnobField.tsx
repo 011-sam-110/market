@@ -67,7 +67,7 @@ export function KnobField({ knob, population, binding = false }: KnobFieldProps)
 
       {binding ? (
         <span className="knob-field__binding">
-          binding — this is the knob eliminating the most rows right now
+          binding · this knob fails the most rows
         </span>
       ) : null}
 

@@ -7,6 +7,14 @@
   max-width: var(--measure);
 }
 
+/* Same rule as `p + .figure` in components.css, for the chart wrappers. A
+ * caption that follows a paragraph read as a fifth line of that paragraph. */
+p + .bars,
+p + .composition,
+p + .histogram {
+  margin-top: var(--s5);
+}
+
 .chart__axis {
   margin-top: var(--s3);
   font-size: var(--t-micro);

@@ -1,0 +1,657 @@
+/* Niches — the leaf ledger.
+ *
+ * The reader opens this on a phone. Below 900px each niche stacks into a
+ * block. At 900px and above the same markup becomes a ruled grid.
+ * The grid needs more width than the sheet holds, so it scrolls inside
+ * `.scroll-x`. The detail panel sits outside that scroller, because a reader
+ * must never scroll sideways to read prose.
+ *
+ * This file adds no colour. It uses the tokens only. The verdict colours mark
+ * verdicts. The coverage ramp marks how much of a niche the pipeline measured.
+ */
+
+/* --- the two kinds of leaf id ---------------------------------------- */
+
+.niches__split {
+  display: grid;
+  gap: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 760px) {
+  .niches__split {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 var(--s6);
+  }
+}
+
+.niches__kind {
+  border-top: var(--hair) solid var(--rule);
+  padding: var(--s3) 0 var(--s4);
+}
+
+.niches__kind-name {
+  display: block;
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.niches__kind-body {
+  margin-top: var(--s2);
+  font-size: var(--t-micro);
+  line-height: 1.45;
+  color: var(--ink-2);
+  max-width: 42ch;
+}
+
+.niches__figures {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--s4);
+  margin-top: var(--s2);
+}
+
+.niches__warn {
+  margin-top: var(--s4);
+  padding: var(--s3) var(--s4);
+  background: var(--withheld-wash);
+  border-left: 1px solid var(--withheld);
+  max-width: var(--measure);
+  font-size: var(--t-label);
+  color: var(--ink);
+}
+
+.niches__method {
+  margin-top: var(--s4);
+  border-top: var(--hair) solid var(--rule-faint);
+  padding-top: var(--s3);
+}
+
+.niches__method > summary {
+  cursor: pointer;
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+.niches__checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: var(--measure);
+}
+
+.niches__check {
+  border-top: var(--hair) solid var(--rule-faint);
+  padding: var(--s3) 0;
+  font-size: var(--t-micro);
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.niches__check b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.niches__check-result {
+  display: block;
+  margin-top: var(--s1);
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.niches__check-result--broken {
+  color: var(--fail);
+}
+
+/* --- the load path ---------------------------------------------------- */
+
+.niches__load {
+  display: grid;
+  gap: var(--s6);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 900px) {
+  .niches__load {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* A fail count is a fail. A withheld count is an absence. The two never share
+ * a colour and this board never adds them. */
+.niches__load--failed .bars__fill {
+  background: var(--fail-mark);
+}
+
+.niches__load--withheld .bars__fill {
+  background: var(--withheld);
+}
+
+/* --- controls --------------------------------------------------------- */
+
+.niches__controls {
+  display: grid;
+  gap: var(--s3) var(--s4);
+  grid-template-columns: minmax(0, 1fr);
+  padding-bottom: var(--s4);
+}
+
+@media (min-width: 620px) {
+  .niches__controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 980px) {
+  .niches__controls {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.niches__control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  min-width: 0;
+}
+
+.niches__control > span {
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.niches__control select,
+.niches__control input {
+  min-height: 44px;
+  padding: var(--s2) var(--s3);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  font-size: var(--t-label);
+  color: var(--ink);
+  min-width: 0;
+  width: 100%;
+}
+
+.niches__control select:disabled {
+  color: var(--ink-3);
+  background: var(--paper-sunk);
+}
+
+.niches__toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 44px;
+  font-size: var(--t-label);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.niches__toggle input {
+  width: 1.1rem;
+  height: 1.1rem;
+  min-height: 0;
+  flex: none;
+}
+
+.niches__result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s2) var(--s4);
+  padding: var(--s3) 0;
+  border-top: var(--hair) solid var(--rule-faint);
+}
+
+.niches__result .den {
+  display: inline-block;
+}
+
+/* --- the ledger ------------------------------------------------------- */
+
+.niche-grid {
+  --niche-cols: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 900px) {
+  .niche-grid {
+    /* leaf · band · listings · sellers · sellers by kind · score · withheld ·
+     * measured · differenced */
+    --niche-cols:
+      minmax(8.5rem, 1.2fr) minmax(4.5rem, 0.6fr) minmax(5.5rem, 0.8fr)
+      minmax(5rem, 0.7fr) minmax(7rem, 1fr) minmax(4.5rem, 0.6fr)
+      minmax(5.5rem, 0.7fr) minmax(10rem, 1.4fr) minmax(8.5rem, 1.2fr);
+    min-width: 68rem;
+  }
+}
+
+.niche-head {
+  display: flex;
+  gap: var(--s2);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: var(--s2) 0;
+  border-bottom: var(--hair) solid var(--rule);
+}
+
+@media (min-width: 900px) {
+  .niche-head {
+    display: grid;
+    grid-template-columns: var(--niche-cols);
+    gap: var(--s3);
+    overflow: visible;
+    align-items: end;
+    padding: 0 var(--s4) var(--s2);
+  }
+}
+
+.niche-head__btn {
+  flex: none;
+  background: none;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: var(--s2) var(--s3);
+  min-height: 44px;
+  cursor: pointer;
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  white-space: nowrap;
+  text-align: left;
+}
+
+.niche-head__btn[data-active="yes"] {
+  color: var(--ink);
+  border-color: var(--ink);
+  font-weight: 700;
+}
+
+@media (min-width: 900px) {
+  .niche-head__btn {
+    border: 0;
+    border-bottom: var(--hair) solid transparent;
+    border-radius: 0;
+    padding: var(--s1) 0;
+    min-height: 0;
+    white-space: normal;
+  }
+
+  .niche-head__btn[data-active="yes"] {
+    border-bottom-color: var(--ink);
+  }
+}
+
+.niche-head__dir {
+  font-weight: 700;
+}
+
+.niche-rows {
+  border-bottom: var(--hair) solid var(--rule);
+}
+
+.niche-row {
+  display: grid;
+  grid-template-columns: var(--niche-cols);
+  gap: var(--s2) var(--s3);
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-top: var(--hair) solid var(--rule-faint);
+  border-left: var(--heavy) solid transparent;
+  padding: var(--s4);
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: inherit;
+}
+
+.niche-row:hover {
+  background: var(--paper-sunk);
+}
+
+.niche-row[aria-expanded="true"] {
+  border-left-color: var(--ink);
+  background: var(--paper-sunk);
+}
+
+.niche-cell {
+  min-width: 0;
+}
+
+.niche-cell__name {
+  display: block;
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+@media (min-width: 900px) {
+  /* The header carries the column names at this width, so the per-cell name
+   * would repeat them on every row. */
+  .niche-cell__name {
+    display: none;
+  }
+}
+
+.niche-cell__value {
+  display: block;
+  font-size: var(--t-label);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.niche-cell__value--quiet {
+  font-weight: 400;
+  color: var(--ink-2);
+}
+
+.niche-cell__value--withheld {
+  color: var(--withheld);
+}
+
+.niche-cell--leaf {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 900px) {
+  .niche-cell--leaf {
+    grid-column: auto;
+  }
+}
+
+.niche-tag {
+  display: inline-block;
+  margin-top: var(--s1);
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 0.05em 0.4em;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  color: var(--ink-2);
+}
+
+.niche-tag--deepened {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+/* --- the measurement meter -------------------------------------------- */
+
+.niche-meter {
+  display: flex;
+  gap: 2px;
+  height: 12px;
+  width: 100%;
+  max-width: 11rem;
+  margin-bottom: var(--s1);
+}
+
+.niche-meter__cell {
+  position: relative;
+  flex: 1 1 0;
+  background: var(--paper-sunk);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.niche-meter__cell::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: var(--fill, 0%);
+  background: var(--cov-3);
+}
+
+/* A knob with no observations is withheld, so its cell carries the withheld
+ * colour and a hatch. Colour never carries this state alone. The row states
+ * the same fact in words beside the meter. */
+.niche-meter__cell--withheld {
+  background: var(--withheld-wash);
+}
+
+.niche-meter__cell--withheld::after {
+  height: 100%;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--withheld) 0 2px,
+    transparent 2px 5px
+  );
+}
+
+/* --- verdict strip ---------------------------------------------------- */
+
+.niche-verdicts {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s1) var(--s2);
+  margin-top: var(--s2);
+  border-top: var(--hair) solid var(--rule-faint);
+  padding-top: var(--s2);
+}
+
+@media (min-width: 620px) {
+  .niche-verdicts {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+.verdict {
+  min-width: 0;
+  padding: var(--s1) var(--s2) var(--s1) 0;
+}
+
+.verdict__name {
+  display: block;
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.verdict__word {
+  display: block;
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.verdict--pass .verdict__word {
+  color: var(--pass);
+}
+
+.verdict--fail .verdict__word {
+  color: var(--fail);
+}
+
+.verdict--withheld .verdict__word {
+  color: var(--withheld);
+}
+
+.verdict--none {
+  background: var(--withheld-wash);
+  padding-left: var(--s2);
+}
+
+.verdict .stamp {
+  border-width: 1.5px;
+  letter-spacing: 0.1em;
+  margin-top: 1px;
+}
+
+/* --- the thin-evidence line ------------------------------------------- */
+
+.niche-story {
+  grid-column: 1 / -1;
+  margin-top: var(--s2);
+  font-size: var(--t-micro);
+  line-height: 1.45;
+  color: var(--withheld);
+  max-width: 66ch;
+}
+
+/* --- empty and named states ------------------------------------------- */
+
+.niches__empty {
+  padding: var(--s6) 0;
+  max-width: var(--measure);
+  border-top: var(--hair) solid var(--rule);
+}
+
+.niches__empty h3 {
+  font-size: var(--t-title);
+  font-weight: 700;
+}
+
+.niches__empty p {
+  margin-top: var(--s2);
+  color: var(--ink-2);
+}
+
+.niches__empty .btn {
+  margin-top: var(--s4);
+}
+
+/* --- detail ----------------------------------------------------------- */
+
+.niche-detail {
+  border-top: var(--heavy) solid var(--ink);
+  padding: var(--s4) 0 var(--s6);
+  scroll-margin-top: var(--s4);
+}
+
+@media (min-width: 900px) {
+  .niche-detail {
+    scroll-margin-top: 56px;
+  }
+}
+
+.niche-detail__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s2) var(--s4);
+}
+
+.niche-detail__title {
+  font-size: var(--t-head);
+  font-weight: 700;
+}
+
+.niche-detail__close {
+  margin-left: auto;
+}
+
+.niche-detail__knobs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--s4);
+  margin-top: var(--s4);
+}
+
+@media (min-width: 700px) {
+  .niche-detail__knobs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1040px) {
+  .niche-detail__knobs {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+.niche-detail__metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--s4);
+  margin-top: var(--s3);
+}
+
+@media (min-width: 700px) {
+  .niche-detail__metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1040px) {
+  .niche-detail__metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* The metric figures are readings, not headline figures. */
+.niche-detail__metrics .field__figure {
+  font-size: var(--t-title);
+}
+
+.niche-products {
+  list-style: none;
+  margin: var(--s3) 0 0;
+  padding: 0;
+}
+
+.niche-product {
+  border-top: var(--hair) solid var(--rule-faint);
+  padding: var(--s3) 0;
+}
+
+.niche-product__title {
+  font-size: var(--t-label);
+  font-weight: 600;
+  line-height: 1.35;
+  max-width: 56ch;
+}
+
+.niche-product__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s1) var(--s4);
+  margin-top: var(--s1);
+  font-size: var(--t-micro);
+  color: var(--ink-2);
+}
+
+.niche-product__withheld {
+  color: var(--withheld);
+  font-weight: 600;
+}
+
+.niche-more {
+  margin-top: var(--s4);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3);
+  align-items: center;
+}
