@@ -2,7 +2,8 @@
 REM eBay niche finder -- daily pipeline (design spec section 10; contracts
 REM section 4, s5_snapshots_board's "run_daily.cmd" deliverable).
 REM
-REM Runs SWEEP -> DEEPEN -> BOARD -> POPULATION -> PUBLISH, in that order,
+REM Runs FETCH PRESET -> SWEEP -> DEEPEN -> BOARD -> POPULATION -> PUBLISH
+REM -> EXPORT DASHBOARD, in that order,
 REM once a day. DIFFERENCE (Tier 3) is NOT a separate step here:
 REM scripts\niche_board.py calls
 REM phoneloop.snapshots.difference itself, over the two most recent
@@ -102,7 +103,7 @@ REM                     populated the store for today -- on an empty store it
 REM                     prints "0 listings to deepen" and exits 0 rather than
 REM                     failing, so it is safe to run daily even on a day
 REM                     SWEEP found nothing new.
-REM   [4/5] POPULATION REVIEW writes the self-contained population page
+REM   [5/7] POPULATION REVIEW writes the self-contained population page
 REM                     (scripts\population_report.py). Read-only over the
 REM                     store, ~20 s, and regenerated rather than one-off on
 REM                     purpose: a one-off HTML is a snapshot of today's
@@ -122,7 +123,7 @@ REM                     population page's locked panels duly filled the night
 REM                     date 2 landed. Kept as a note rather than deleted
 REM                     because a comment that describes a fixed blocker in
 REM                     the present tense is how it gets "re-fixed" later.
-REM   [5/5] PUBLISH     refreshes web\ from the reports just written and
+REM   [6/7] PUBLISH     refreshes web\ from the reports just written and
 REM                     rebuilds its index. Stages content only -- it runs no
 REM                     git command, deliberately (this working tree carries
 REM                     untracked scratch files, and an automated `git add`
@@ -148,21 +149,36 @@ if errorlevel 1 (
 set "PHONELOOP_HARNESS=live"
 if not defined PHONELOOP_DATA_DIR set "PHONELOOP_DATA_DIR=%USERPROFILE%\.phoneloop\prod"
 
-echo [run_daily] %DATE% %TIME% -- [1/5] SWEEP
+REM Pulls the knob preset the dashboard published, into
+REM %%USERPROFILE%%\.phoneloop\knobs.json, so tonight ranks against what the
+REM operator last set rather than against whatever Knobs() defaults to.
+REM
+REM Every failure path inside fetch_preset.py exits 0 and leaves the existing
+REM file untouched -- an unreachable endpoint, a bad envelope, an oversized
+REM body. A preset that cannot be fetched must never stop a sweep, and a
+REM half-written knobs.json would silently re-rank the whole board.
+REM
+REM Needs PHONELOOP_PRESET_URL to do anything at all; without it the step is
+REM a no-op that says so. An explicit PHONELOOP_* variable still beats the
+REM file, per Knobs.load.
+echo [run_daily] %DATE% %TIME% -- [1/7] FETCH PRESET (never fatal)
+"%PY%" scripts\fetch_preset.py
+
+echo [run_daily] %DATE% %TIME% -- [2/7] SWEEP
 "%PY%" scripts\bulk_ebay.py --leaf-sweep --pages-per-shard 3
 if errorlevel 1 (
     echo [run_daily] SWEEP failed -- checkpointed, safe to re-run
     exit /b 1
 )
 
-echo [run_daily] %DATE% %TIME% -- [2/5] DEEPEN (Tier 2, item-page enrichment)
+echo [run_daily] %DATE% %TIME% -- [3/7] DEEPEN (Tier 2, item-page enrichment)
 "%PY%" scripts\bulk_ebay.py --deepen
 if errorlevel 1 (
     echo [run_daily] DEEPEN failed -- SWEEP already landed today's rows, safe to re-run
     exit /b 1
 )
 
-echo [run_daily] %DATE% %TIME% -- [3/5] BOARD (difference runs inside niche_board.py once 2+ snapshot dates exist)
+echo [run_daily] %DATE% %TIME% -- [4/7] BOARD (difference runs inside niche_board.py once 2+ snapshot dates exist)
 "%PY%" scripts\niche_board.py --products --html
 if errorlevel 1 (
     echo [run_daily] BOARD failed
@@ -177,7 +193,7 @@ REM so generating the full page here would leave the hosted site with no
 REM population review at all. The explorer is still a command away when it is
 REM actually wanted:
 REM     python scripts\population_report.py --html
-echo [run_daily] %DATE% %TIME% -- [4/5] POPULATION REVIEW
+echo [run_daily] %DATE% %TIME% -- [5/7] POPULATION REVIEW
 "%PY%" scripts\population_report.py --html --summary
 if errorlevel 1 (
     echo [run_daily] POPULATION REVIEW failed
@@ -189,10 +205,27 @@ REM Vercel project is connected to the GitHub repo, so a commit of web\ is
 REM what actually deploys; this step only stages the content locally.
 REM Deliberately NOT a git commit -- this repo holds untracked scratch files
 REM and an automated `git add` here is how one of them reaches a remote.
-echo [run_daily] %DATE% %TIME% -- [5/5] PUBLISH (stages web\ for deploy)
+echo [run_daily] %DATE% %TIME% -- [6/7] PUBLISH (stages web\ for deploy)
 "%PY%" scripts\publish_web.py
 if errorlevel 1 (
     echo [run_daily] PUBLISH failed -- reports were still written under DATA_DIR\reports
+    exit /b 1
+)
+
+REM Writes dashboard\public\data -- the nine JSON files the board reads.
+REM Nothing is sampled and nothing is capped; the payloads carry `capped:
+REM false` and their own limit so a future truncation shows up on screen
+REM rather than as a quietly shorter board.
+REM
+REM Deliberately does NOT deploy. `python scripts\publish_dashboard.py
+REM --deploy` is the separate, deliberate step, and it refuses to publish a
+REM bundle whose date is older than the newest snapshot in the store -- a
+REM failed export would otherwise republish yesterday under today's date and
+REM look completely healthy doing it.
+echo [run_daily] %DATE% %TIME% -- [7/7] EXPORT DASHBOARD (bundle only, no deploy)
+"%PY%" scripts\export_dashboard.py
+if errorlevel 1 (
+    echo [run_daily] EXPORT DASHBOARD failed -- the sweep and reports already landed; the board keeps serving the previous bundle
     exit /b 1
 )
 
