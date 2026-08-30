@@ -93,13 +93,25 @@ export interface KnobResult {
 
 /** amount × bp/10000, rounded half up, in integer pence.
  *
- * Python writes this `(amount * bp + 5000) // 10000`. Floor division on
- * non-negative operands is `Math.floor`, NOT `Math.round` and NOT `| 0`:
- * `Math.round` would round half away from zero at a different point and
- * `| 0` truncates toward zero and overflows past 2^31. Every caller here
- * passes a price or a fee, never a difference, so the operands stay
- * non-negative and the largest intermediate (price × 12900) is far inside
- * Number.MAX_SAFE_INTEGER. */
+ * Python writes this `(amount * bp + 5000) // 10000` and this is a literal
+ * transcription of it.
+ *
+ * Honest note, because the comment here used to claim more than it could:
+ * `Math.round(a * b / 10000)` and `((a * b + 5000) / 10000) | 0` were both
+ * checked against this expression over every amount from 0 to 200,000 pence
+ * against all thirteen rates this codebase uses — 2.6 million pairs — and
+ * disagree on NONE of them. So neither is a bug waiting to happen on today's
+ * inputs, and an injected regression swapping one in stays green in the
+ * golden replay, correctly.
+ *
+ * The form is kept anyway for two reasons that are real: it is the same
+ * expression as the Python, so the two read as one rule rather than two that
+ * happen to agree; and it is the only one of the three that still matches
+ * Python if a negative amount ever reaches it. Python floors toward negative
+ * infinity, `Math.round` rounds half toward positive infinity, and `| 0`
+ * truncates toward zero — three different answers below zero. Every caller
+ * today passes a price or a fee, never a difference, so that case does not
+ * arise; it is one refactor away from arising. */
 export function bp(amountPence: number, basisPoints: number): number {
   return Math.floor((amountPence * basisPoints + 5000) / 10000);
 }

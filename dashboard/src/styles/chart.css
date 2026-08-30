@@ -1,0 +1,261 @@
+/* Chart anatomy. Recessive grid and axes, thin marks, direct labels. */
+
+.chart__caption {
+  font-size: var(--t-label);
+  color: var(--ink-2);
+  margin-bottom: var(--s3);
+  max-width: var(--measure);
+}
+
+.chart__axis {
+  margin-top: var(--s3);
+  font-size: var(--t-micro);
+  color: var(--ink-3);
+  max-width: var(--measure);
+}
+
+/* --- horizontal bars -------------------------------------------------- */
+
+.bars__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.bars__row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 14rem) 1fr auto;
+  grid-template-areas:
+    "label track value"
+    "den   den   den";
+  align-items: center;
+  gap: var(--s1) var(--s3);
+  padding: var(--s3) 0;
+  border-top: var(--hair) solid var(--rule-faint);
+}
+
+@media (max-width: 620px) {
+  .bars__row {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "label value"
+      "track track"
+      "den   den";
+  }
+}
+
+.bars__label {
+  grid-area: label;
+  font-size: var(--t-label);
+}
+
+.bars__track {
+  grid-area: track;
+  position: relative;
+  display: block;
+  height: 10px;
+  background: var(--paper-sunk);
+  border-radius: 2px;
+}
+
+.bars__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  background: var(--cov-3);
+  /* 4px rounded data-end, anchored to the baseline at the left. */
+  border-radius: 0 4px 4px 0;
+  transition: width var(--dur) var(--ease-out);
+}
+
+.bars__row--flagged .bars__fill {
+  background: var(--fail-mark);
+}
+
+.bars__row--flagged .bars__label {
+  font-weight: 700;
+}
+
+.bars__value {
+  grid-area: value;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: var(--t-label);
+}
+
+.bars__row--flagged .bars__value {
+  color: var(--fail);
+}
+
+.bars__den {
+  grid-area: den;
+}
+
+.bars__note {
+  grid-column: 1 / -1;
+  font-size: var(--t-micro);
+  color: var(--fail);
+  max-width: 62ch;
+}
+
+/* --- composition ------------------------------------------------------ */
+
+.composition__bar {
+  display: block;
+  width: 100%;
+  height: 26px;
+  margin-bottom: var(--s4);
+}
+
+.composition__key {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s3);
+}
+
+@media (min-width: 760px) {
+  .composition__key {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s3) var(--s6);
+  }
+}
+
+.composition__item {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  grid-template-areas:
+    "swatch name  value"
+    ".      share share"
+    ".      note  note";
+  align-items: baseline;
+  gap: var(--s1) var(--s3);
+  padding-top: var(--s2);
+  border-top: var(--hair) solid var(--rule-faint);
+  transition: opacity var(--dur) var(--ease-out);
+}
+
+.composition__item.is-dim {
+  opacity: 0.45;
+}
+
+.composition__swatch {
+  grid-area: swatch;
+  width: 14px;
+  height: 14px;
+  align-self: center;
+  border-radius: 2px;
+}
+
+.composition__name {
+  grid-area: name;
+  font-weight: 600;
+  font-size: var(--t-label);
+}
+
+.composition__value {
+  grid-area: value;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.composition__share {
+  grid-area: share;
+}
+
+.composition__note {
+  grid-area: note;
+  font-size: var(--t-micro);
+  color: var(--ink-2);
+  line-height: 1.4;
+  max-width: 46ch;
+}
+
+/* --- histogram -------------------------------------------------------- */
+
+.histogram__plot {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px; /* the 2px surface gap between adjacent fills */
+  height: 180px;
+  border-bottom: var(--hair) solid var(--rule);
+  padding-bottom: 0;
+}
+
+.histogram__col {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  height: 100%;
+  position: relative;
+  min-width: 0;
+}
+
+.histogram__bar {
+  display: block;
+  width: 100%;
+  background: var(--cov-3);
+  border-radius: 4px 4px 0 0; /* rounded data-end, anchored to the baseline */
+  transition: background var(--dur) var(--ease-out);
+}
+
+.histogram__col.is-hover .histogram__bar {
+  background: var(--ink);
+}
+
+.histogram__count {
+  position: absolute;
+  bottom: 100%;
+  font-size: var(--t-micro);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+  padding-bottom: 2px;
+}
+
+.histogram__tick {
+  position: absolute;
+  top: 100%;
+  padding-top: 4px;
+  font-size: var(--t-micro);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.histogram {
+  margin: 0 0 var(--s6);
+  padding-bottom: var(--s5);
+}
+
+/* --- locked ----------------------------------------------------------- */
+
+.locked {
+  padding: var(--s4);
+  background: var(--paper-sunk);
+  border-left: 1px solid var(--rule);
+  max-width: var(--measure);
+}
+
+.locked__title {
+  font-size: var(--t-title);
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.locked__body {
+  margin-top: var(--s2);
+  color: var(--ink-2);
+}
+
+.locked__when {
+  margin-top: var(--s3);
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--withheld);
+  font-weight: 600;
+}

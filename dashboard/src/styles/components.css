@@ -1,0 +1,516 @@
+/* The record head, the fields, the entries, the nav.
+ * Everything here is the fanfold vocabulary; nothing invents a new one. */
+
+/* --- record head ------------------------------------------------------ */
+
+.record {
+  padding: var(--s6) 0 var(--s5);
+  border-bottom: var(--heavy) solid var(--ink);
+}
+
+.record__title {
+  font-size: var(--t-head);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.record__sub {
+  margin-top: var(--s1);
+  color: var(--ink-2);
+  font-size: var(--t-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.record__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  margin: var(--s5) 0 0;
+}
+
+@media (min-width: 700px) {
+  .record__facts {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.record__fact {
+  border-top: var(--hair) solid var(--rule);
+  padding: var(--s3) var(--s3) var(--s3) 0;
+}
+
+.record__fact dt {
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.record__fact dd {
+  margin: var(--s1) 0 0;
+  font-size: var(--t-figure);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+.record__of {
+  font-size: var(--t-label);
+  font-weight: 400;
+  color: var(--ink-3);
+  letter-spacing: 0;
+}
+
+.record__provenance {
+  margin-top: var(--s4);
+  color: var(--ink-2);
+  font-size: var(--t-label);
+  max-width: var(--measure);
+}
+
+.record__warnings {
+  margin: var(--s4) 0 0;
+  padding: var(--s3) var(--s4);
+  list-style: none;
+  background: var(--withheld-wash);
+  border-left: 1px solid var(--withheld);
+  max-width: var(--measure);
+}
+
+.record__warnings li + li {
+  margin-top: var(--s2);
+}
+
+.record__warnings strong {
+  color: var(--withheld);
+}
+
+/* --- figure ----------------------------------------------------------- */
+
+.figure {
+  display: block;
+  min-width: 0;
+}
+
+.figure__against {
+  display: block;
+  margin-top: var(--s2);
+  font-size: var(--t-micro);
+  color: var(--ink-2);
+}
+
+.figure__why {
+  margin-top: var(--s2);
+  font-size: var(--t-micro);
+  line-height: 1.4;
+  color: var(--withheld);
+  max-width: 34ch;
+}
+
+/* --- knob field ------------------------------------------------------- */
+
+.knob-field__verdict {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.field--fail .knob-field__verdict {
+  color: var(--fail);
+}
+
+.field--pass .knob-field__verdict {
+  color: var(--pass);
+}
+
+.field--withheld .knob-field__verdict {
+  color: var(--withheld);
+}
+
+.knob-field__threshold {
+  color: var(--ink-3);
+}
+
+.knob-field__secondary {
+  display: block;
+  margin-top: var(--s1);
+  font-size: var(--t-micro);
+  color: var(--ink-3);
+}
+
+.knob-field__binding {
+  display: block;
+  margin-top: var(--s2);
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* --- evidence --------------------------------------------------------- */
+
+.evidence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s2) var(--s4);
+  padding: var(--s3) 0 0;
+  font-size: var(--t-micro);
+  color: var(--ink-2);
+}
+
+.evidence__grade {
+  font-family: var(--face-narrow);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.evidence--measured .evidence__grade {
+  color: var(--pass);
+}
+.evidence--thin .evidence__grade {
+  color: var(--ink-2);
+}
+.evidence--absent .evidence__grade {
+  color: var(--withheld);
+}
+
+.evidence__unknown {
+  color: var(--withheld);
+  font-weight: 600;
+}
+
+.evidence__why {
+  flex-basis: 100%;
+  margin: 0;
+  max-width: 60ch;
+  line-height: 1.45;
+  color: var(--withheld);
+}
+
+.evidence--thin .evidence__why {
+  color: var(--ink-2);
+}
+
+/* --- entry (one shortlist row) ---------------------------------------- */
+
+.entry {
+  padding: var(--s5) var(--s4);
+  border-top: var(--hair) solid var(--rule-faint);
+}
+
+@media (min-width: 700px) {
+  .entry {
+    padding-left: var(--s5);
+    padding-right: var(--s5);
+  }
+}
+
+.entry__head {
+  display: flex;
+  gap: var(--s4);
+  align-items: flex-start;
+}
+
+.entry__rank {
+  flex: none;
+  font-family: var(--face-narrow);
+  font-size: var(--t-title);
+  font-weight: 700;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  padding-top: 0.15em;
+  min-width: 2.5ch;
+  text-align: right;
+}
+
+.entry__title {
+  font-size: var(--t-title);
+  font-weight: 600;
+  line-height: 1.32;
+  letter-spacing: -0.012em;
+  margin: 0;
+  /* A real eBay title runs 80 characters. It is the row's identity, so it
+   * wraps rather than truncating — an ellipsis here hides the noun. */
+  max-width: 56ch;
+}
+
+.entry__meta {
+  margin-top: var(--s1);
+  font-size: var(--t-micro);
+  color: var(--ink-3);
+}
+
+.entry__score {
+  margin-left: auto;
+  flex: none;
+  text-align: right;
+}
+
+.entry__score b {
+  display: block;
+  font-size: var(--t-figure);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.entry__knobs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--s4);
+  margin-top: var(--s4);
+}
+
+@media (min-width: 700px) {
+  .entry__knobs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1040px) {
+  .entry__knobs {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+/* --- view scaffolding ------------------------------------------------- */
+
+.view {
+  padding-top: var(--s6);
+}
+
+.view__head {
+  max-width: var(--measure);
+  margin-bottom: var(--s5);
+}
+
+.view__title {
+  font-size: var(--t-head);
+  font-weight: 700;
+}
+
+.view__lede {
+  margin-top: var(--s2);
+  color: var(--ink-2);
+}
+
+.panel {
+  border-top: var(--hair) solid var(--rule);
+  padding: var(--s4) 0 var(--s6);
+}
+
+.panel__title {
+  font-size: var(--t-title);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.panel__note {
+  margin-top: var(--s2);
+  color: var(--ink-2);
+  font-size: var(--t-label);
+  max-width: var(--measure);
+}
+
+/* --- nav -------------------------------------------------------------- */
+
+/* Thumb-first: on a phone the nav is a reachable bar at the bottom, not a
+ * row of tabs at the top of a page that is scrolled away by then. */
+.nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  background: var(--paper);
+  border-top: var(--hair) solid var(--rule);
+  box-shadow: var(--lift);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.nav__item {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--s2) var(--s1) calc(var(--s2) + 2px);
+  background: none;
+  border: 0;
+  border-top: var(--heavy) solid transparent;
+  cursor: pointer;
+  color: var(--ink-2);
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  letter-spacing: 0.03em;
+  min-height: 56px; /* thumb target */
+  transition: color var(--dur) var(--ease-out);
+}
+
+.nav__item[aria-current="page"] {
+  color: var(--ink);
+  border-top-color: var(--ink);
+  font-weight: 700;
+}
+
+.nav__item:hover {
+  color: var(--ink);
+}
+
+.nav__blurb {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .nav {
+    position: sticky;
+    top: 0;
+    bottom: auto;
+    box-shadow: none;
+    border-top: 0;
+    border-bottom: var(--hair) solid var(--rule);
+    padding: 0;
+    max-width: 1180px;
+    margin: 0 auto;
+    backdrop-filter: none;
+  }
+
+  .nav__item {
+    flex-direction: row;
+    gap: var(--s2);
+    justify-content: center;
+    min-height: 48px;
+    border-top: 0;
+    border-bottom: var(--heavy) solid transparent;
+    font-size: var(--t-label);
+  }
+
+  .nav__item[aria-current="page"] {
+    border-bottom-color: var(--ink);
+  }
+}
+
+.icon {
+  flex: none;
+  display: block;
+}
+
+/* --- controls --------------------------------------------------------- */
+
+.control {
+  display: block;
+  padding: var(--s4) 0;
+  border-top: var(--hair) solid var(--rule-faint);
+}
+
+.control__row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+}
+
+.control__label {
+  font-weight: 600;
+}
+
+.control__value {
+  margin-left: auto;
+  font-size: var(--t-title);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.control__value--moved {
+  color: var(--withheld);
+}
+
+.control input[type="range"] {
+  width: 100%;
+  margin-top: var(--s3);
+  accent-color: var(--ink);
+}
+
+.control__note {
+  margin-top: var(--s2);
+  font-size: var(--t-micro);
+  color: var(--ink-2);
+  max-width: 62ch;
+}
+
+.provenance-tag {
+  display: inline-block;
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.1em 0.4em;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  color: var(--ink-3);
+}
+
+.provenance-tag--unverified,
+.provenance-tag--decision {
+  color: var(--withheld);
+}
+
+/* --- buttons ---------------------------------------------------------- */
+
+.btn {
+  font-family: var(--face-narrow);
+  font-size: var(--t-label);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: var(--s2) var(--s4);
+  min-height: 44px;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  cursor: pointer;
+  transition:
+    background var(--dur) var(--ease-out),
+    color var(--dur) var(--ease-out);
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.btn:disabled {
+  color: var(--ink-3);
+  border-color: var(--rule);
+  cursor: not-allowed;
+}
+
+.btn--quiet {
+  border-color: var(--rule);
+  color: var(--ink-2);
+}
+
+/* --- states ----------------------------------------------------------- */
+
+.state {
+  padding: var(--s7) 0;
+  max-width: var(--measure);
+}
+
+.state__title {
+  font-size: var(--t-title);
+  font-weight: 700;
+}
+
+.state__body {
+  margin-top: var(--s2);
+  color: var(--ink-2);
+}
+
+.state--error .state__title {
+  color: var(--fail);
+}
