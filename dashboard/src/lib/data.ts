@@ -37,9 +37,10 @@ async function getJSON<T>(file: string): Promise<T> {
   });
   if (!res.ok) {
     throw new Error(
-      `${file} came back ${res.status}. The bundle is written by ` +
-        `scripts/export_dashboard.py; a missing file means the export did ` +
-        `not finish, not that there is no data.`,
+      `The server returned ${res.status} for ${file}. ` +
+        `scripts/export_dashboard.py writes the bundle. ` +
+        `A missing file means the export did not finish. ` +
+        `It does not mean the store is empty.`,
     );
   }
   return (await res.json()) as T;
@@ -199,33 +200,33 @@ export function bundleWarnings(b: Bundle): BundleWarning[] {
   if (b.products.capped) {
     out.push({
       what: "The product board is truncated",
-      detail: `Only ${b.products.n.toLocaleString()} of the products were exported (limit ${b.products.limit.toLocaleString()}). Rankings below the cut are missing entirely.`,
+      detail: `The export wrote ${b.products.n.toLocaleString()} products against a limit of ${b.products.limit.toLocaleString()}. Every ranking below the cut is missing.`,
     });
   }
   if (b.niches.capped) {
     out.push({
       what: "The niche board is truncated",
-      detail: `Only ${b.niches.n.toLocaleString()} niches were exported (limit ${b.niches.limit.toLocaleString()}).`,
+      detail: `The export wrote ${b.niches.n.toLocaleString()} niches against a limit of ${b.niches.limit.toLocaleString()}. Every niche below the cut is missing.`,
     });
   }
   if (b.manifest.empty) {
     out.push({
       what: "The store is empty",
       detail:
-        "The export ran against a store with no rows. Every figure below is absent rather than zero.",
+        "The export read a store with no rows. Every figure below is absent. None of them is a real zero.",
     });
   }
   if (!b.manifest.has_difference) {
     out.push({
       what: "Nothing can be differenced yet",
       detail:
-        "Day-over-day change needs two snapshots. Until then sell-through is a lifetime average, which is not comparable to the window threshold.",
+        "Day-over-day change needs two snapshots. Sell-through is a lifetime average until then. A lifetime average does not compare to the window threshold.",
     });
   }
   if (b.coverage.latest_date !== b.manifest.latest_date) {
     out.push({
       what: "The coverage payload is from a different day",
-      detail: `manifest says ${b.manifest.latest_date}, coverage says ${b.coverage.latest_date}. One of the two files is stale.`,
+      detail: `The manifest says ${b.manifest.latest_date}. The coverage file says ${b.coverage.latest_date}. One of the two files is stale.`,
     });
   }
   return out;

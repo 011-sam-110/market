@@ -55,10 +55,10 @@ export function App() {
           <h1 className="state__title">The bundle did not load</h1>
           <p className="state__body">{error.message}</p>
           <p className="state__body">
-            This board reads static JSON written by{" "}
-            <code>scripts/export_dashboard.py</code>. Nothing is computed at
-            request time, so a failure here is a missing or half-written file,
-            never a query that timed out.
+            This board reads static JSON files.{" "}
+            <code>scripts/export_dashboard.py</code> writes them. No code runs
+            at request time. A failure here means a missing or half-written
+            file. It never means a query timed out.
           </p>
         </div>
       </main>
@@ -71,8 +71,8 @@ export function App() {
         <div className="state">
           <h1 className="state__title">Reading the record</h1>
           <p className="state__body">
-            Fetching the manifest, the knob settings, the fee table, and the
-            ranked boards. About 3 MB over the wire.
+            The board is fetching the manifest, the knob settings, the fee
+            table and the ranked boards. The download is about 3 MB.
           </p>
         </div>
       </main>

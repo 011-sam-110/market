@@ -296,8 +296,8 @@ export function Histogram({
         })}
       </div>
       <p className="chart__axis">
-        {xLabel} · bar height is log-scaled, or every column after the first
-        would be invisible
+        {xLabel}. Bar height uses a log scale. On a linear scale every column
+        after the first is invisible.
       </p>
     </figure>
   );
@@ -324,10 +324,10 @@ export function Locked({
       <h3 className="locked__title">{title}</h3>
       <p className="locked__body">{shows}</p>
       <p className="locked__when">
-        Needs {needs} daily snapshots; {have} held.{" "}
+        This panel needs {needs} daily snapshots. The store holds {have}.{" "}
         {toGo === 0
-          ? "Ready on the next export."
-          : `${toGo} more ${toGo === 1 ? "night" : "nights"} to go.`}
+          ? "It unlocks on the next export."
+          : `${toGo} more ${toGo === 1 ? "night" : "nights"}.`}
       </p>
     </div>
   );

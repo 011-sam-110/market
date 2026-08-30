@@ -75,16 +75,16 @@ export function Evidence({
 
       {grade === "absent" ? (
         <p className="evidence__why">
-          {unknown} of the six knobs had nothing to measure, and a knob with
-          no data scores the same as a knob that passed. This row is ranked
-          above better-measured rows for that reason alone.
+          {unknown} of the six knobs had nothing to measure. A knob with no
+          data scores the same as a knob that passed. This row ranks above
+          better-measured rows for that reason alone.
         </p>
       ) : null}
 
       {grade !== "absent" && members === 1 ? (
         <p className="evidence__why">
-          One listing by one seller. It can score well and still not be
-          evidence that the product can be sourced repeatedly.
+          One listing by one seller. This row can score well. It is still not
+          evidence that you can buy the product again.
         </p>
       ) : null}
     </div>

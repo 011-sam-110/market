@@ -59,14 +59,15 @@ export function RecordHead({ bundle }: { bundle: Bundle }) {
       <p className="record__provenance">
         {window ? (
           <>
-            {isoDay(window.date_a)} → {isoDay(window.date_b)}. A listing can
-            only be differenced when eBay showed a sold count on both days,
-            which is why the differenced count is smaller than the sweep.
+            {isoDay(window.date_a)} to {isoDay(window.date_b)}. The pipeline
+            can difference a listing only when eBay showed a sold count on
+            both days. That is why the differenced count is smaller than the
+            sweep.
           </>
         ) : (
           <>
-            One snapshot. Day-over-day change needs two, so nothing on this
-            board is a trend yet.
+            One snapshot only. Day-over-day change needs two snapshots.
+            Nothing on this board is a trend yet.
           </>
         )}
       </p>

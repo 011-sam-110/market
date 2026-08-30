@@ -141,17 +141,17 @@ export function knobTitle(knob: string): string {
  * than the field name. A second reader has not read the spec. */
 const KNOB_QUESTIONS: Record<string, string> = {
   min_margin:
-    "The most you could pay a supplier and still clear the margin floor after every eBay fee. Negative means no supplier price works at this sale price.",
+    "The highest price you can pay a supplier and still clear the margin floor after eBay fees. A negative figure means no supplier price works at this sale price.",
   sell_through:
-    "Units sold per listing over the measured window. Only comparable when the window is close to the 30 days the threshold was set for.",
+    "Units sold for each listing in the measured window. The figure compares to the threshold only when the window is near 30 days.",
   price_band:
-    "The median landed price — item plus postage, business sellers only — against the band you set.",
+    "The median landed price against the band you set. Landed price is item plus postage. The pipeline counts business sellers only.",
   delivery:
-    "Median delivery estimate, read off the item page at the late end of its range, to this machine's own postcode.",
+    "The median delivery estimate. The pipeline reads it from the item page and takes the late end of the range. The estimate is for this machine’s own postcode.",
   seller_quality:
-    "The competitive field, not the supplier: median rival feedback score and how many ratings it rests on.",
+    "The median feedback score of rival sellers, and the number of ratings behind it. eBay shows rivals, not suppliers.",
   saturation:
-    "Distinct sellers on this product at the best identity tier available.",
+    "The number of separate sellers on this product, at the best identity tier available.",
 };
 
 export function knobQuestion(knob: string): string {

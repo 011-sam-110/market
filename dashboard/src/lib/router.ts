@@ -32,12 +32,12 @@ export const VIEW_TITLES: Record<ViewName, string> = {
 /** What each view is for, in one line, shown in the nav on a wide screen.
  * The terminology is this project's own invention; it has to teach itself. */
 export const VIEW_BLURBS: Record<ViewName, string> = {
-  shortlist: "Today's ranked candidates, each showing the evidence it rests on",
-  console: "Move a threshold and watch which knob is binding the funnel",
-  niches: "Every leaf × price band, and how much of each one was measured",
-  explore: "All 29,863 listings on the latest sweep, filterable",
-  coverage: "What was measured, what was not, and where a figure is missing",
-  trends: "Day-over-day change, and what is still locked until more dates land",
+  shortlist: "Today’s ranked candidates. Each one shows its own evidence.",
+  console: "Move a threshold. See which knob binds the funnel.",
+  niches: "Every leaf and price band. How much of each one the pipeline measured.",
+  explore: "Every listing in the latest sweep. Filter on any field.",
+  coverage: "What the pipeline measured, and what it did not.",
+  trends: "Day-over-day change. What stays locked until more snapshots arrive.",
 };
 
 export interface Route {
