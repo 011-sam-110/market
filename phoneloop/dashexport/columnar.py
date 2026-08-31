@@ -262,6 +262,7 @@ def export_deltas(b: Build) -> dict:
                       f"{len(b.dates)}",
             "n_dates": len(b.dates),
             "unlocks_at_dates": 2,
+            "population_comparable": None,
         }
 
     diff = b.diff
@@ -340,6 +341,14 @@ def export_deltas(b: Build) -> dict:
 
     return {
         "state": "live",
+        # Whether these two nights swept the same population, off each
+        # night's own checkpoint. Every figure below measures the sweep as
+        # well as the market when this says no, and the board is required to
+        # say so on its face rather than presenting the difference as change
+        # over time. None means the build could not read a verdict at all,
+        # which is not the same as a clean one. See phoneloop/footprint.py.
+        "population_comparable": (
+            b.comparability.as_dict() if b.comparability is not None else None),
         "date_a": diff.date_a,
         "date_b": diff.date_b,
         "window_days": window_days,

@@ -302,8 +302,33 @@ export interface DeltaAggregate {
   sum_delta_known_negative: number;
 }
 
+/* Whether two nights swept the same population, read off each night's own
+ * sweep checkpoint rather than off the config that asked for it. The config
+ * says what was requested. The checkpoint says what happened, including the
+ * shards eBay blocked, and those are exactly the nights that differ.
+ *
+ * `comparable: false` does NOT mean the difference is wrong. It means the
+ * difference measures the sweep as well as the market, so no figure derived
+ * from it may be presented as change over time. */
+export interface Comparability {
+  date_a: string;
+  date_b: string;
+  comparable: boolean;
+  leaves_added: string[];
+  leaves_removed: string[];
+  depth_changed: Record<string, [number, number]>;
+  /* Sweep settings that moved between the two nights — the results view
+   * above all, which changes what a page returns without touching a single
+   * shard key. A gallery card carries no seller line; a list card does. */
+  sweep_changed: Record<string, [unknown, unknown]>;
+  note: string;
+}
+
 export interface DeltasPayload {
   state: "live" | "unavailable";
+  /* null when the build could not read a verdict at all, which is not the
+   * same as a clean one and must never render as one. */
+  population_comparable: Comparability | null;
   date_a: string;
   date_b: string;
   window_days: number;

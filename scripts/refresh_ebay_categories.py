@@ -308,7 +308,102 @@ def playwright_proxy() -> dict | None:
 
 # --- orchestration -----------------------------------------------------
 
-def build_tree(cassette: Cassette, page, *, max_leaves: int,
+def walk(rec, page, node: dict, *, ancestry: tuple[str, ...], depth: int,
+         max_children: int, seen: set[str], stats: dict) -> list[dict]:
+    """Every childless category at or under one browse node, depth-first.
+
+    One fetch per node, and that single fetch answers both questions: the
+    numeric id of the node, and the list of its children. eBay embeds the id
+    inline and renders the "Shop by category" panel on the same page, so
+    walking one level deeper costs nothing extra for the level already being
+    visited -- only for the level below it.
+
+    `depth` counts levels still to descend. At 0 this node is recorded as a
+    leaf whether or not eBay would list children under it, which is the
+    honest reading of a bounded crawl: "childless in the tree we recorded",
+    exactly what `leaves_for` has always meant.
+
+    `seen` holds bn_ids and is shared across the whole crawl. The panels
+    cross-link -- a subcategory appears under two parents, and a department
+    panel repeats its own ancestor -- so without it the walk revisits nodes,
+    refetches them, and writes one leaf twice under two paths. A duplicated
+    leaf is a duplicated shard, and the sweep would book those listings twice.
+    """
+    bn_id = node["bn_id"]
+    if bn_id in seen:
+        return []
+    seen.add(bn_id)
+
+    try:
+        html_text = rec("ebay_categories", f"leaf-{bn_id}",
+                        lambda: scrape(page, LEAF_URL.format(bn_id=bn_id)))
+    except Blocked as exc:
+        print(f"    ! {'  ' * len(ancestry)}{node['title'][:40]:<40} BLOCKED: {exc}")
+        stats["blocked"] += 1
+        return []
+    if page is not None:
+        time.sleep(PAUSE_S)
+    stats["fetched"] += 1
+
+    category_id = parse_leaf_category_id(html_text)
+    title = parse_leaf_title(html_text) or node["title"]
+    path = ancestry + (title,)
+
+    # Parsed even at the depth limit, where nothing recurses into them. The
+    # HTML is already in hand, so counting the children this crawl is NOT
+    # descending into is free, and it is the only way to price the next level
+    # without running it. `--depth 1 --max-leaves 0` therefore returns both
+    # the full level-2 leaf set and the exact fetch count a depth-2 crawl
+    # would cost.
+    #
+    # Every browse panel links to the category it is already on, so the
+    # self-link goes first and separately. It is not evidence about children.
+    listed = [c for c in parse_department_subcats(html_text)
+              if c["bn_id"] != bn_id]
+    fresh = [c for c in listed if c["bn_id"] not in seen]
+    stats["children_seen"] += len(listed)
+
+    if depth <= 0:
+        # Bounded crawl: this node is the leaf, whatever sits under it. The
+        # sweep will shard on it, and nothing below it is recorded, so there
+        # is nothing to double count.
+        stats["children_not_walked"] += len(fresh)
+        return _leaf(category_id, title, path, ancestry, stats)
+
+    if not listed:
+        return _leaf(category_id, title, path, ancestry, stats)
+
+    if not fresh:
+        # A hub whose whole subtree another branch already recorded. It is
+        # NOT childless, and recording it as a leaf would sweep a category
+        # that contains listings already swept under its children -- the
+        # double count `seen` exists to prevent, arriving by the back door.
+        return []
+
+    out: list[dict] = []
+    for child in fresh[:max_children or None]:
+        out.extend(walk(rec, page, child, ancestry=path, depth=depth - 1,
+                        max_children=max_children, seen=seen, stats=stats))
+    return out
+
+
+def _leaf(category_id: str | None, title: str, path: tuple[str, ...],
+          ancestry: tuple[str, ...], stats: dict) -> list[dict]:
+    """One recorded leaf, or nothing when the page carried no numeric id.
+
+    The sweep filters on the classic numeric id. A category without one
+    cannot be swept, and inventing one sweeps a different category.
+    """
+    if not category_id:
+        print(f"    ! {'  ' * len(ancestry)}{title[:40]:<40} no numeric id on "
+              "its own page (none of the known shapes matched)")
+        stats["no_id"] += 1
+        return []
+    return [{"category_id": category_id, "title": title,
+             "path": list(path), "depth": len(ancestry)}]
+
+
+def build_tree(cassette: Cassette, page, *, max_leaves: int, depth: int,
                harness_mode: str) -> tuple[dict, list[tuple[str, int, int]]]:
     """The whole recorded tree, plus a (department, subcats_seen,
     leaves_resolved) row per department for the report.
@@ -316,6 +411,12 @@ def build_tree(cassette: Cassette, page, *, max_leaves: int,
     `page` is None in replay -- every network-shaped call below goes through
     `recorded()`, which never calls `scrape` in that mode, so this function
     runs with no browser at all when replaying.
+
+    `seen` spans every department, not each one separately. The departments
+    genuinely overlap -- "Home & Garden" sits above both Home, Furniture & DIY
+    and Pet Supplies -- so a per-department set would let one leaf land in two
+    departments, and the sweep would then sweep it twice and the board would
+    count its listings twice.
     """
     def rec(kind: str, name: str, produce):
         return recorded(cassette, kind, name, produce, harness_mode=harness_mode)
@@ -327,6 +428,9 @@ def build_tree(cassette: Cassette, page, *, max_leaves: int,
 
     departments: dict[str, dict] = {}
     report: list[tuple[str, int, int]] = []
+    seen: set[str] = set()
+    stats = {"fetched": 0, "blocked": 0, "no_id": 0,
+             "children_seen": 0, "children_not_walked": 0}
 
     for dept in IN_SCOPE:
         measured = top_ids.get(dept.title)
@@ -351,33 +455,21 @@ def build_tree(cassette: Cassette, page, *, max_leaves: int,
             continue
 
         subcats = parse_department_subcats(dept_html)
+        print(f"  {dept.title:<32} {len(subcats):>3} subcats seen, walking "
+              f"{depth} level(s) down")
         leaves: list[dict] = []
-        for sub in subcats[:max_leaves]:
-            try:
-                leaf_html = rec("ebay_categories", f"leaf-{sub['bn_id']}",
-                                lambda s=sub: scrape(page, LEAF_URL.format(bn_id=s["bn_id"])))
-            except Blocked as exc:
-                print(f"    ! {sub['title']:<30} BLOCKED: {exc}")
-                continue
-            leaf_id = parse_leaf_category_id(leaf_html)
-            if not leaf_id:
-                print(f"    ! {sub['title']:<30} no numeric category id found "
-                      "on its own page (none of the known shapes matched)")
-                continue
-            leaves.append({
-                "category_id": leaf_id,
-                "title": parse_leaf_title(leaf_html) or sub["title"],
-            })
-            if page is not None:
-                time.sleep(PAUSE_S)
+        for sub in subcats[:max_leaves or None]:
+            leaves.extend(walk(rec, page, sub, ancestry=(dept.title,),
+                               depth=depth - 1, max_children=max_leaves,
+                               seen=seen, stats=stats))
 
         departments[dept.slug] = {
             "title": dept.title, "category_id": dept.category_id,
             "leaves": leaves,
         }
         report.append((dept.title, len(subcats), len(leaves)))
-        print(f"  {dept.title:<32} {len(subcats):>3} subcats seen, "
-              f"{len(leaves):>2} leaves resolved to a real numeric id")
+        print(f"  {dept.title:<32} -> {len(leaves):>4} leaves resolved, "
+              f"{stats['fetched']} pages fetched so far")
 
     tree = {
         "_generated_at": datetime.now(UTC).isoformat(),
@@ -385,6 +477,22 @@ def build_tree(cassette: Cassette, page, *, max_leaves: int,
             "all_categories": ALL_CATEGORIES_URL,
             "department_page": DEPARTMENT_URL,
             "leaf_page": LEAF_URL,
+        },
+        # What the crawl was ASKED for, beside what it got. A tree with 600
+        # leaves and one with 43 shard the sweep completely differently, and
+        # phoneloop/footprint.py reports the resulting population change as
+        # non-comparable. This block is what says whether that change was
+        # deliberate.
+        "_crawl": {
+            "depth": depth,
+            "max_children_per_node": max_leaves or None,
+            "pages_fetched": stats["fetched"],
+            "nodes_blocked": stats["blocked"],
+            "nodes_without_a_numeric_id": stats["no_id"],
+            "children_seen": stats["children_seen"],
+            # What one more level would cost, in fetches, measured rather
+            # than guessed at.
+            "children_not_walked": stats["children_not_walked"],
         },
         "departments": departments,
     }
@@ -398,7 +506,14 @@ def main() -> int:
                     default=Path(os.environ.get("PHONELOOP_FIXTURES",
                                                 str(harness.DEFAULT_ROOT))))
     ap.add_argument("--out", type=Path, default=None)
-    ap.add_argument("--max-leaves", type=int, default=MAX_LEAVES_PER_DEPARTMENT)
+    ap.add_argument("--max-leaves", type=int, default=MAX_LEAVES_PER_DEPARTMENT,
+                    help="children to take per node (0 = every one listed)")
+    ap.add_argument("--depth", type=int, default=1,
+                    help="levels to walk below a department. 1 is the "
+                         "original behaviour and stops at the immediate "
+                         "subcategories. 2 walks their children too, which is "
+                         "where the real taxonomy leaves start, and costs one "
+                         "fetch per node at the new level.")
     ap.add_argument("--offline", action="store_true",
                     help="force replay regardless of PHONELOOP_HARNESS; never "
                          "opens a browser")
@@ -422,7 +537,9 @@ def main() -> int:
     if not offline:
         print("egress: " + (f"proxy {proxies.redact(proxies.proxy_url())}"
                             if args.proxy else "DIRECT (switch with --proxy if blocked)"))
-    print(f"in-scope departments: {len(IN_SCOPE)}, up to {args.max_leaves} leaves each\n")
+    cap = args.max_leaves or "every"
+    print(f"in-scope departments: {len(IN_SCOPE)}, depth {args.depth}, "
+          f"{cap} child(ren) per node\n")
 
     with contextlib.ExitStack() as stack:
         page = None
@@ -436,7 +553,7 @@ def main() -> int:
             page = browser.new_page(locale="en-GB")
 
         tree, report = build_tree(cassette, page, max_leaves=args.max_leaves,
-                                  harness_mode=harness_mode)
+                                  depth=args.depth, harness_mode=harness_mode)
 
     out.write_text(json.dumps(tree, indent=2, ensure_ascii=False) + "\n",
                    encoding="utf-8")
@@ -445,9 +562,20 @@ def main() -> int:
     print("\nleaves per in-scope department:")
     total = 0
     for title, subcats_seen, leaves_resolved in report:
-        print(f"  {title:<32} {leaves_resolved:>2} / {subcats_seen:>3} subcats seen")
+        print(f"  {title:<32} {leaves_resolved:>4} leaves "
+              f"from {subcats_seen:>3} subcats seen")
         total += leaves_resolved
     print(f"\n{total} leaves total across {len(report)} departments")
+    c = tree["_crawl"]
+    print(f"{c['pages_fetched']} pages fetched, {c['nodes_blocked']} blocked, "
+          f"{c['nodes_without_a_numeric_id']} without a numeric id")
+    if c["children_not_walked"]:
+        print(f"{c['children_not_walked']} children sit one level below the "
+              f"leaves this crawl recorded. Walking them is --depth "
+              f"{args.depth + 1} and costs that many more fetches.")
+    print("\nA changed leaf set makes the first difference after this crawl "
+          "non-comparable, by design. phoneloop/footprint.py says so on the "
+          "board rather than presenting it as overnight market movement.")
     return 0
 
 

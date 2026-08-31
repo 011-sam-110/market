@@ -323,3 +323,77 @@
   gap: var(--s3);
   margin-top: var(--s4);
 }
+
+/* --- the population verdict --------------------------------------------- */
+/* Whether the two nights swept the same population, above every figure that
+ * depends on it. The three states are deliberately not three colours of the
+ * same block: a clean verdict is one line of prose because it earns no more
+ * room than that, and a broken one is a stamped notice because the reader
+ * must not scroll past it into a difference they will read as market
+ * movement. */
+
+.verdict {
+  margin-top: var(--s5);
+  max-width: var(--measure);
+}
+
+.verdict--clean {
+  padding-left: var(--s3);
+  border-left: 1px solid var(--rule-faint);
+  color: var(--ink-2);
+}
+
+.verdict--unknown,
+.verdict--broken {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s3);
+  padding: var(--s4);
+  /* The stamp inside is sized against this block, not the viewport — the
+   * same container rule the knob fields carry, for the same reason. */
+  container-type: inline-size;
+}
+
+.verdict--unknown {
+  background: var(--withheld-wash);
+  border-left: 3px solid var(--withheld);
+}
+
+.verdict--broken {
+  background: var(--fail-wash);
+  border-left: 3px solid var(--fail);
+}
+
+.verdict__note {
+  color: var(--ink);
+}
+
+.verdict__list {
+  width: 100%;
+  border-top: var(--hair) solid var(--rule-faint);
+}
+
+.verdict__row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s2) 0;
+  border-bottom: var(--hair) solid var(--rule-faint);
+  font-size: var(--t-label);
+}
+
+.verdict__row dt {
+  color: var(--ink-2);
+}
+
+/* Two page numbers read as a comparison only when they line up. */
+.verdict__row dd {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.verdict__row--more dt,
+.verdict__row--more dd {
+  color: var(--ink-3);
+}

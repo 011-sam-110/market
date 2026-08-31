@@ -30,7 +30,12 @@ import {
   isoDay,
   leafLabel,
 } from "../lib/format";
-import type { Bundle, DeltaAggregate, DeltasPayload } from "../lib/types";
+import type {
+  Bundle,
+  Comparability,
+  DeltaAggregate,
+  DeltasPayload,
+} from "../lib/types";
 import type { ViewProps } from "../lib/viewProps";
 
 import "../styles/views/trends.css";
@@ -436,6 +441,104 @@ function NothingToDifference({ bundle }: { bundle: Bundle }) {
 const MOVERS_HEAD = 8;
 const PRODUCTS_HEAD = 6;
 
+/* Whether the two nights swept the same population.
+ *
+ * This sits above every figure on the view because it governs all of them. A
+ * count that moves between two unlike sweeps measures the sweep, and the
+ * reader has no way to tell that apart from a market that moved — the numbers
+ * look identical and healthy either way. That failure has a shape here: the
+ * nightly job carried `--pages-per-shard 10` while the two snapshots in the
+ * store were both swept at 3, and the first scheduled night would have booked
+ * pages four to ten as thousands of overnight arrivals.
+ *
+ * A clean verdict prints one quiet line. It is not a badge and it does not
+ * congratulate the pipeline. An unclean one owns the top of the view.
+ */
+function PopulationVerdict({ verdict }: { verdict: Comparability | null }) {
+  if (verdict === null) {
+    return (
+      <div className="verdict verdict--unknown">
+        <Stamp scale="figure">no verdict</Stamp>
+        <p className="verdict__note">
+          This build read no sweep footprint, so it cannot say whether the two
+          nights swept the same population. Treat every figure below as a
+          difference between two sweeps of unknown shape.
+        </p>
+      </div>
+    );
+  }
+
+  if (verdict.comparable) {
+    return (
+      <p className="verdict verdict--clean">
+        Both nights swept the same leaves to the same depth, under the same
+        sweep settings. The difference below is a difference in the market.
+      </p>
+    );
+  }
+
+  /* Named, not counted. "3 leaves changed depth" is a number the reader can
+   * do nothing with; the leaf and the two page numbers are what they can go
+   * and check. Long lists are capped and the cap says what it hid. */
+  const depth = Object.entries(verdict.depth_changed);
+  const sweep = Object.entries(verdict.sweep_changed);
+
+  return (
+    <div className="verdict verdict--broken">
+      <Stamp scale="record" tone="fail">
+        not comparable
+      </Stamp>
+      <p className="verdict__note">{verdict.note}</p>
+
+      {sweep.length > 0 ? (
+        <dl className="verdict__list">
+          {sweep.map(([field, [before, after]]) => (
+            <div key={field} className="verdict__row">
+              <dt>{field.replace(/_/g, " ")}</dt>
+              <dd>
+                {before === null ? "unrecorded" : String(before)} →{" "}
+                {after === null ? "unrecorded" : String(after)}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+
+      {depth.length > 0 ? (
+        <dl className="verdict__list">
+          {depth.slice(0, VERDICT_HEAD).map(([leaf, [before, after]]) => (
+            <div key={leaf} className="verdict__row">
+              <dt>leaf {leaf}</dt>
+              <dd>
+                page {before} → page {after}
+              </dd>
+            </div>
+          ))}
+          {depth.length > VERDICT_HEAD ? (
+            <div className="verdict__row verdict__row--more">
+              <dt>and {fmt(depth.length - VERDICT_HEAD)} more</dt>
+              <dd>not listed</dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : null}
+
+      {verdict.leaves_added.length > 0 || verdict.leaves_removed.length > 0 ? (
+        <p className="verdict__note">
+          {fmt(verdict.leaves_added.length)} leaves entered the sweep and{" "}
+          {fmt(verdict.leaves_removed.length)} left it. A leaf that eBay blocked
+          on one night looks exactly like a leaf that was dropped, so both are
+          reported.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/* Enough rows to see the shape of the change, not enough to bury the note
+ * that explains it. The count of what is hidden is always printed. */
+const VERDICT_HEAD = 8;
+
 function DayPair({ bundle, deltas }: { bundle: Bundle; deltas: DeltasPayload }) {
   const { manifest } = bundle;
   const [allNiches, setAllNiches] = useState(false);
@@ -648,6 +751,8 @@ function DayPair({ bundle, deltas }: { bundle: Bundle; deltas: DeltasPayload }) 
           </p>
         </div>
       </div>
+
+      <PopulationVerdict verdict={deltas.population_comparable} />
 
       {/* ---------------------------------------------------- the pair */}
 
