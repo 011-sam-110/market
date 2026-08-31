@@ -16,7 +16,7 @@
   margin-top: var(--s4);
   padding: var(--s3) var(--s4);
   background: var(--withheld-wash);
-  border-left: 1px solid var(--withheld);
+  border-left: var(--hair) solid var(--withheld);
   max-width: var(--measure);
 }
 
@@ -180,7 +180,7 @@
 .trends-quote {
   margin-top: var(--s3);
   padding-left: var(--s4);
-  border-left: 1px solid var(--rule);
+  border-left: var(--hair) solid var(--rule);
   color: var(--ink-2);
   font-size: var(--t-label);
   max-width: var(--measure);
@@ -285,7 +285,7 @@
   padding: var(--s3) var(--s4);
   list-style: none;
   background: var(--fail-wash);
-  border-left: 1px solid var(--fail);
+  border-left: var(--hair) solid var(--fail);
   max-width: var(--measure);
 }
 
@@ -339,7 +339,7 @@
 
 .verdict--clean {
   padding-left: var(--s3);
-  border-left: 1px solid var(--rule-faint);
+  border-left: var(--hair) solid var(--rule-faint);
   color: var(--ink-2);
 }
 
@@ -355,14 +355,20 @@
   container-type: inline-size;
 }
 
+/* `--hair`, like every other ruled block, and NOT `--heavy`. tokens.css
+ * reserves the heavy rule for the binding knob and nothing else, so a
+ * three-pixel coloured edge here spends a weight the page keeps for one
+ * meaning. It is also redundant: the stamp is already the loudest object on
+ * the view, and a thick edge beside it makes the block read as decorated
+ * rather than stamped. */
 .verdict--unknown {
   background: var(--withheld-wash);
-  border-left: 3px solid var(--withheld);
+  border-left: var(--hair) solid var(--withheld);
 }
 
 .verdict--broken {
   background: var(--fail-wash);
-  border-left: 3px solid var(--fail);
+  border-left: var(--hair) solid var(--fail);
 }
 
 .verdict__note {
@@ -404,7 +410,7 @@
 
 .trends-pending {
   padding-left: var(--s3);
-  border-left: 2px solid var(--rule-faint);
+  border-left: var(--hair) solid var(--rule-faint);
   color: var(--ink-3);
 }
 
@@ -412,5 +418,5 @@
   margin-top: var(--s3);
   padding: var(--s3) var(--s4);
   background: var(--fail-wash);
-  border-left: 3px solid var(--fail);
+  border-left: var(--hair) solid var(--fail);
 }
