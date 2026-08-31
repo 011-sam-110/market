@@ -4,7 +4,13 @@ REM section 4, s5_snapshots_board's "run_daily.cmd" deliverable).
 REM
 REM Runs FETCH PRESET -> SWEEP -> DEEPEN -> BOARD -> POPULATION -> PUBLISH
 REM -> EXPORT DASHBOARD, in that order,
-REM once a day. DIFFERENCE (Tier 3) is NOT a separate step here:
+REM once a day.
+REM
+REM BUDGET, measured on the 2026-08-30 run and used to size every step below:
+REM   sweep   10.0 s per page load   (128 loads, 11:16:53 -> 11:38:14)
+REM   deepen   6.04 s per item page  (200 items, 11:38:14 -> 11:58:22)
+REM   board 23 s, population 57 s, publish <1 s, export 87 s
+REM A step sized against anything other than these two numbers is a guess. DIFFERENCE (Tier 3) is NOT a separate step here:
 REM scripts\niche_board.py calls
 REM phoneloop.snapshots.difference itself, over the two most recent
 REM snapshot dates in the store, whenever at least two exist (one exists on
@@ -64,11 +70,34 @@ REM                     project keeps hitting: not a missing number, a
 REM                     confident wrong one, and nothing about it goes red.
 REM
 REM                     Changing the depth is legitimate; doing it silently
-REM                     between two nights that get differenced is not. Raise
-REM                     it toward 42 (the 10,000-result cap) when full Tier 1
-REM                     coverage is wanted, and read the FIRST diff after the
-REM                     change as non-comparable.
-REM                     3 pages x 43 hubs = ~128 page loads, ~21 min measured.
+REM                     between two nights that get differenced is not.
+REM
+REM                     That is no longer left to whoever reads this comment.
+REM                     phoneloop/footprint.py reads each night's own sweep
+REM                     checkpoint, compares the two, and the board prints
+REM                     NOT COMPARABLE with the settings that moved rather
+REM                     than presenting the difference as change over time.
+REM                     Raise this toward 42 (the 10,000-result cap) when full
+REM                     Tier 1 coverage is wanted; the first diff after the
+REM                     change reports itself.
+REM                     3 pages x 43 hubs = ~128 page loads, ~21 min measured
+REM                     (11:16:53 to 11:38:14 on 2026-08-30, so 10.0 s a page).
+REM   RESULTS VIEW      pinned to list (&_dmd=1) in phoneloop/ebay.py since
+REM                     2026-08-31. eBay picks the view PER CATEGORY, and the
+REM                     gallery card carries no seller line: Toys & Games sat
+REM                     at 2.0% seller coverage for four nights while all
+REM                     eight sibling departments sat at 96.6-97.9%. Forcing
+REM                     Pet Supplies into gallery reproduced the outage
+REM                     exactly (96.9% -> 3.1%), which is what made it a
+REM                     cause. Gallery also returned fewer rows: 169 against
+REM                     255 on the same leaf, band and page.
+REM
+REM                     Tonight is the first night in list view, so tonight's
+REM                     difference against last night is genuinely NOT
+REM                     comparable and says so. Every recording captured
+REM                     before that date is a gallery-era page and no longer
+REM                     matches its key, so an offline replay run needs a
+REM                     fresh scripts/record_ebay.py session.
 REM   checkpoint        dated per UTC day (bulk_ebay_checkpoint_YYYY-MM-DD
 REM                     .json): a failed night resumes, the next night
 REM                     starts clean -- Tier 3 needs the whole population
@@ -171,8 +200,35 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM --deepen-limit 5000, raised from the default 200 on 2026-08-31.
+REM
+REM Measured, not chosen. The store holds 29,824 listings, and only 1,896
+REM product groups of two or more listings exist across them, holding 4,750
+REM listings. That is the entire rankable population -- the other 25,074 are
+REM singletons no board row is made of. 4,707 of the 4,750 had never been
+REM deepened, so min_margin, price_band and delivery read "?" on almost every
+REM row the board ranks.
+REM
+REM At the measured 6.04 s an item (200 items between 11:38:14 and 11:58:22
+REM on 2026-08-30), 5,000 is about 8.4 hours. That is a one-off catch-up, not
+REM a nightly cost: rows_to_deepen only ever returns listings with no
+REM seller_type, so once the rankable population is enriched the nightly
+REM batch is whatever arrived that day.
+REM
+REM 200 a night against a 4,707 backlog was 23.5 nights to the same place.
+REM
+REM This does NOT affect comparability. The Tier 3 difference is computed
+REM off the sweep checkpoint, and deepening enriches listings the sweep
+REM already recorded rather than adding any. phoneloop/footprint.py is
+REM therefore silent about this change, correctly.
+REM
+REM Unattended for eight hours, so bulk_ebay.py stops after 25 consecutive
+REM item-page failures rather than spending the rest of the budget on a
+REM source that has started refusing the session. It exits 0 when it does:
+REM the rows already deepened are real and stored, and the board is worth
+REM building on them.
 echo [run_daily] %DATE% %TIME% -- [3/7] DEEPEN (Tier 2, item-page enrichment)
-"%PY%" scripts\bulk_ebay.py --deepen
+"%PY%" scripts\bulk_ebay.py --deepen --deepen-limit 5000
 if errorlevel 1 (
     echo [run_daily] DEEPEN failed -- SWEEP already landed today's rows, safe to re-run
     exit /b 1
