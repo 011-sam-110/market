@@ -1,0 +1,2008 @@
+{
+  "_generated_at": "2026-08-31T00:29:57.685651+00:00",
+  "_source": {
+    "all_categories": "https://www.ebay.co.uk/n/all-categories",
+    "department_page": "https://www.ebay.co.uk/b/x/{category_id}",
+    "leaf_page": "https://www.ebay.co.uk/b/{bn_id}"
+  },
+  "_crawl": {
+    "depth": 1,
+    "max_children_per_node": null,
+    "pages_fetched": 220,
+    "nodes_blocked": 0,
+    "nodes_without_a_numeric_id": 5,
+    "children_seen": 2222,
+    "children_not_walked": 2222
+  },
+  "departments": {
+    "home_furniture_diy": {
+      "title": "Home, Furniture & DIY",
+      "category_id": "11700",
+      "leaves": [
+        {
+          "category_id": "26677",
+          "title": "Bathroom Fixtures, Accessories & Supplies",
+          "path": [
+            "Home, Furniture & DIY",
+            "Bathroom Fixtures, Accessories & Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "20444",
+          "title": "Home Bedding",
+          "path": [
+            "Home, Furniture & DIY",
+            "Home Bedding"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "262975",
+          "title": "Candles & Home Fragrance",
+          "path": [
+            "Home, Furniture & DIY",
+            "Candles & Home Fragrance"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "16086",
+          "title": "Celebration & Occasion Supplies",
+          "path": [
+            "Home, Furniture & DIY",
+            "Celebration & Occasion Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "176988",
+          "title": "Children's Furniture & Home Supplies",
+          "path": [
+            "Home, Furniture & DIY",
+            "Children's Furniture & Home Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "258031",
+          "title": "Clocks",
+          "path": [
+            "Home, Furniture & DIY",
+            "Clocks"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "20625",
+          "title": "Home Cookware, Dining & Bar Supplies",
+          "path": [
+            "Home, Furniture & DIY",
+            "Home Cookware, Dining & Bar Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "63514",
+          "title": "Window Curtains, Blinds & Accessories",
+          "path": [
+            "Home, Furniture & DIY",
+            "Window Curtains, Blinds & Accessories"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "20563",
+          "title": "Decorative Cushions",
+          "path": [
+            "Home, Furniture & DIY",
+            "Decorative Cushions"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "3187",
+          "title": "DIY Materials",
+          "path": [
+            "Home, Furniture & DIY",
+            "DIY Materials"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "631",
+          "title": "DIY Tools & Workshop Equipment",
+          "path": [
+            "Home, Furniture & DIY",
+            "DIY Tools & Workshop Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "38219",
+          "title": "Fireplaces & Stoves",
+          "path": [
+            "Home, Furniture & DIY",
+            "Fireplaces & Stoves"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "14308",
+          "title": "Food & Drinks",
+          "path": [
+            "Home, Furniture & DIY",
+            "Food & Drinks"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "30565",
+          "title": "Home Heating, Cooling & Air",
+          "path": [
+            "Home, Furniture & DIY",
+            "Home Heating, Cooling & Air"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "10033",
+          "title": "Home Décor Items",
+          "path": [
+            "Home, Furniture & DIY",
+            "Home Décor Items"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "41968",
+          "title": "Home Security",
+          "path": [
+            "Home, Furniture & DIY",
+            "Home Security"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "299",
+          "title": "Household & Laundry Supplies",
+          "path": [
+            "Home, Furniture & DIY",
+            "Household & Laundry Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "177073",
+          "title": "Kitchen",
+          "path": [
+            "Home, Furniture & DIY",
+            "Kitchen"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "20697",
+          "title": "Home Lighting",
+          "path": [
+            "Home, Furniture & DIY",
+            "Home Lighting"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "157967",
+          "title": "Luggage & Travel Accessories",
+          "path": [
+            "Home, Furniture & DIY",
+            "Luggage & Travel Accessories"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "19266",
+          "title": "Metaphysical & New Age Products",
+          "path": [
+            "Home, Furniture & DIY",
+            "Metaphysical & New Age Products"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "181076",
+          "title": "Other Home, Furniture & DIY Products",
+          "path": [
+            "Home, Furniture & DIY",
+            "Other Home, Furniture & DIY Products"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "20601",
+          "title": "Home Plumbing & Fixtures",
+          "path": [
+            "Home, Furniture & DIY",
+            "Home Plumbing & Fixtures"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "20571",
+          "title": "Rugs & Carpets",
+          "path": [
+            "Home, Furniture & DIY",
+            "Rugs & Carpets"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "185066",
+          "title": "Smart Home & Surveillance Electronics",
+          "path": [
+            "Home, Furniture & DIY",
+            "Smart Home & Surveillance Electronics"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "16092",
+          "title": "Stationery & School Equipment",
+          "path": [
+            "Home, Furniture & DIY",
+            "Stationery & School Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "43502",
+          "title": "Home Storage Solutions",
+          "path": [
+            "Home, Furniture & DIY",
+            "Home Storage Solutions"
+          ],
+          "depth": 1
+        }
+      ]
+    },
+    "garden_patio": {
+      "title": "Garden & Patio",
+      "category_id": "159912",
+      "leaves": [
+        {
+          "category_id": "25863",
+          "title": "Patio & Garden Furniture",
+          "path": [
+            "Garden & Patio",
+            "Patio & Garden Furniture"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "180995",
+          "title": "Gazebos & Pergolas",
+          "path": [
+            "Garden & Patio",
+            "Gazebos & Pergolas"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "139956",
+          "title": "Garden Sheds & Summerhouses",
+          "path": [
+            "Garden & Patio",
+            "Garden Sheds & Summerhouses"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "149242",
+          "title": "Outdoor Heating, Cooking & Eating",
+          "path": [
+            "Garden & Patio",
+            "Outdoor Heating, Cooking & Eating"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "42154",
+          "title": "Garden Lighting",
+          "path": [
+            "Garden & Patio",
+            "Garden Lighting"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "75578",
+          "title": "Bird & Wildlife Accessories",
+          "path": [
+            "Garden & Patio",
+            "Bird & Wildlife Accessories"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "181020",
+          "title": "Composting & Garden Waste Supplies",
+          "path": [
+            "Garden & Patio",
+            "Composting & Garden Waste Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "20498",
+          "title": "Garden Ornaments",
+          "path": [
+            "Garden & Patio",
+            "Garden Ornaments"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "159473",
+          "title": "Garden Clothing, Accessories & Protective Gear",
+          "path": [
+            "Garden & Patio",
+            "Garden Clothing, Accessories & Protective Gear"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "177032",
+          "title": "Garden & Patio Fencing, Privacy Screens & Gates",
+          "path": [
+            "Garden & Patio",
+            "Garden & Patio Fencing, Privacy Screens & Gates"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "181033",
+          "title": "Garden Hand Tools & Equipment",
+          "path": [
+            "Garden & Patio",
+            "Garden Hand Tools & Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "29518",
+          "title": "Garden Power Tools & Equipment",
+          "path": [
+            "Garden & Patio",
+            "Garden Power Tools & Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "177017",
+          "title": "Garden Structures & Shade Equipment",
+          "path": [
+            "Garden & Patio",
+            "Garden Structures & Shade Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "43554",
+          "title": "Hydroponics",
+          "path": [
+            "Garden & Patio",
+            "Hydroponics"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "181027",
+          "title": "Landscaping & Garden Materials",
+          "path": [
+            "Garden & Patio",
+            "Landscaping & Garden Materials"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "43560",
+          "title": "Lawn Mowers, Parts & Accessories",
+          "path": [
+            "Garden & Patio",
+            "Lawn Mowers, Parts & Accessories"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "159913",
+          "title": "Other Garden & Patio Supplies",
+          "path": [
+            "Garden & Patio",
+            "Other Garden & Patio Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "179308",
+          "title": "Plant Care Supplies, Soil & Accessories",
+          "path": [
+            "Garden & Patio",
+            "Plant Care Supplies, Soil & Accessories"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "181003",
+          "title": "Plants, Seeds & Bulbs",
+          "path": [
+            "Garden & Patio",
+            "Plants, Seeds & Bulbs"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "93632",
+          "title": "Ponds, Fountains & Water Features",
+          "path": [
+            "Garden & Patio",
+            "Ponds, Fountains & Water Features"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "20727",
+          "title": "Swimming Pools, Saunas & Hot Tubs",
+          "path": [
+            "Garden & Patio",
+            "Swimming Pools, Saunas & Hot Tubs"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "29521",
+          "title": "Garden Watering Equipment",
+          "path": [
+            "Garden & Patio",
+            "Garden Watering Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "181034",
+          "title": "Weed & Pest Control",
+          "path": [
+            "Garden & Patio",
+            "Weed & Pest Control"
+          ],
+          "depth": 1
+        }
+      ]
+    },
+    "pet_supplies": {
+      "title": "Pet Supplies",
+      "category_id": "1281",
+      "leaves": [
+        {
+          "category_id": "116881",
+          "title": "Beekeeping Supplies",
+          "path": [
+            "Pet Supplies",
+            "Beekeeping Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "20734",
+          "title": "Bird Supplies",
+          "path": [
+            "Pet Supplies",
+            "Bird Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "259318",
+          "title": "Pet Cameras",
+          "path": [
+            "Pet Supplies",
+            "Pet Cameras"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "20737",
+          "title": "Cat Supplies",
+          "path": [
+            "Pet Supplies",
+            "Cat Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "20742",
+          "title": "Dog Supplies",
+          "path": [
+            "Pet Supplies",
+            "Dog Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "20754",
+          "title": "Fish & Aquarium Supplies",
+          "path": [
+            "Pet Supplies",
+            "Fish & Aquarium Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "301",
+          "title": "Other Pet Supplies",
+          "path": [
+            "Pet Supplies",
+            "Other Pet Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "116391",
+          "title": "Pet Memorials",
+          "path": [
+            "Pet Supplies",
+            "Pet Memorials"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "177801",
+          "title": "Poultry & Waterfowl Supplies",
+          "path": [
+            "Pet Supplies",
+            "Poultry & Waterfowl Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "1285",
+          "title": "Reptile Supplies",
+          "path": [
+            "Pet Supplies",
+            "Reptile Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "259320",
+          "title": "Small Animal Supplies",
+          "path": [
+            "Pet Supplies",
+            "Small Animal Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "122950",
+          "title": "Spider & Insect Supplies",
+          "path": [
+            "Pet Supplies",
+            "Spider & Insect Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "259319",
+          "title": "Pet Trackers",
+          "path": [
+            "Pet Supplies",
+            "Pet Trackers"
+          ],
+          "depth": 1
+        }
+      ]
+    },
+    "sporting_goods": {
+      "title": "Sporting Goods",
+      "category_id": "888",
+      "leaves": [
+        {
+          "category_id": "261242",
+          "title": "American Football Gear",
+          "path": [
+            "Sporting Goods",
+            "American Football Gear"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "20835",
+          "title": "Archery Equipment",
+          "path": [
+            "Sporting Goods",
+            "Archery Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "106460",
+          "title": "Badminton Equipment",
+          "path": [
+            "Sporting Goods",
+            "Badminton Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "16021",
+          "title": "Baseball & Softball Equipment",
+          "path": [
+            "Sporting Goods",
+            "Baseball & Softball Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "21194",
+          "title": "Basketball Equipment",
+          "path": [
+            "Sporting Goods",
+            "Basketball Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "20846",
+          "title": "Ten-Pin Bowling Equipment",
+          "path": [
+            "Sporting Goods",
+            "Ten-Pin Bowling Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "117103",
+          "title": "Lawn Bowls Equipment",
+          "path": [
+            "Sporting Goods",
+            "Lawn Bowls Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "30100",
+          "title": "Boxing Equipment",
+          "path": [
+            "Sporting Goods",
+            "Boxing Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "16034",
+          "title": "Camping & Hiking Equipment",
+          "path": [
+            "Sporting Goods",
+            "Camping & Hiking Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "36121",
+          "title": "Canoeing & Kayaking Equipment",
+          "path": [
+            "Sporting Goods",
+            "Canoeing & Kayaking Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "261250",
+          "title": "Cheerleading Gear",
+          "path": [
+            "Sporting Goods",
+            "Cheerleading Gear"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "30105",
+          "title": "Climbing & Mountaineering Equipment",
+          "path": [
+            "Sporting Goods",
+            "Climbing & Mountaineering Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "81538",
+          "title": "Coach & Referee Equipment",
+          "path": [
+            "Sporting Goods",
+            "Coach & Referee Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "21557",
+          "title": "Cricket Equipment",
+          "path": [
+            "Sporting Goods",
+            "Cricket Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "261251",
+          "title": "Curling Gear",
+          "path": [
+            "Sporting Goods",
+            "Curling Gear"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "7294",
+          "title": "Cycling Equipment",
+          "path": [
+            "Sporting Goods",
+            "Cycling Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "72575",
+          "title": "Darts & Accessories",
+          "path": [
+            "Sporting Goods",
+            "Darts & Accessories"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "184355",
+          "title": "Disc Golf Equipment",
+          "path": [
+            "Sporting Goods",
+            "Disc Golf Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "3153",
+          "title": "Equestrian Equipment",
+          "path": [
+            "Sporting Goods",
+            "Equestrian Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "261245",
+          "title": "Field, Ice & Roller Hockey Gear",
+          "path": [
+            "Sporting Goods",
+            "Field, Ice & Roller Hockey Gear"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "1492",
+          "title": "Fishing Equipment",
+          "path": [
+            "Sporting Goods",
+            "Fishing Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "15273",
+          "title": "Fitness, Running & Yoga Equipment",
+          "path": [
+            "Sporting Goods",
+            "Fitness, Running & Yoga Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "20862",
+          "title": "Football Equipment",
+          "path": [
+            "Sporting Goods",
+            "Football Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "33485",
+          "title": "Football Shirts",
+          "path": [
+            "Sporting Goods",
+            "Football Shirts"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "159045",
+          "title": "Geocaching Equipment",
+          "path": [
+            "Sporting Goods",
+            "Geocaching Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "1513",
+          "title": "Golf Equipment",
+          "path": [
+            "Sporting Goods",
+            "Golf Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "79792",
+          "title": "Gymnastics Gear",
+          "path": [
+            "Sporting Goods",
+            "Gymnastics Gear"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "68787",
+          "title": "Handball Gear",
+          "path": [
+            "Sporting Goods",
+            "Handball Gear"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "7301",
+          "title": "Hunting Equipment",
+          "path": [
+            "Sporting Goods",
+            "Hunting Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "16258",
+          "title": "Inline & Roller Skating Equipment",
+          "path": [
+            "Sporting Goods",
+            "Inline & Roller Skating Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "117146",
+          "title": "Kitesurfing & Powerkites",
+          "path": [
+            "Sporting Goods",
+            "Kitesurfing & Powerkites"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "261249",
+          "title": "Lacrosse Gear",
+          "path": [
+            "Sporting Goods",
+            "Lacrosse Gear"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "36279",
+          "title": "Martial Arts Equipment",
+          "path": [
+            "Sporting Goods",
+            "Martial Arts Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "40141",
+          "title": "More Sporting Goods",
+          "path": [
+            "Sporting Goods",
+            "More Sporting Goods"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "184381",
+          "title": "Paintball Equipment",
+          "path": [
+            "Sporting Goods",
+            "Paintball Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "261243",
+          "title": "Rugby League & Rugby Union Gear",
+          "path": [
+            "Sporting Goods",
+            "Rugby League & Rugby Union Gear"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "98952",
+          "title": "Sailing Equipment",
+          "path": [
+            "Sporting Goods",
+            "Sailing Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "11330",
+          "title": "Scooters",
+          "path": [
+            "Sporting Goods",
+            "Scooters"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "16052",
+          "title": "Scuba & Snorkelling Equipment",
+          "path": [
+            "Sporting Goods",
+            "Scuba & Snorkelling Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "16262",
+          "title": "Skateboarding Equipment",
+          "path": [
+            "Sporting Goods",
+            "Skateboarding Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "184369",
+          "title": "Skydiving, Paragliding & Hang Gliding Equipment",
+          "path": [
+            "Sporting Goods",
+            "Skydiving, Paragliding & Hang Gliding Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "21567",
+          "title": "Snooker & Pool Equipment",
+          "path": [
+            "Sporting Goods",
+            "Snooker & Pool Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "261831",
+          "title": "Sport Awards",
+          "path": [
+            "Sporting Goods",
+            "Sport Awards"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "62166",
+          "title": "Squash Equipment",
+          "path": [
+            "Sporting Goods",
+            "Squash Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "22709",
+          "title": "Surfing Equipment",
+          "path": [
+            "Sporting Goods",
+            "Surfing Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "74050",
+          "title": "Swimming Equipment",
+          "path": [
+            "Sporting Goods",
+            "Swimming Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "97072",
+          "title": "Table Tennis Equipment",
+          "path": [
+            "Sporting Goods",
+            "Table Tennis Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "13340",
+          "title": "Tennis Equipment",
+          "path": [
+            "Sporting Goods",
+            "Tennis Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "261246",
+          "title": "Volleyball Gear",
+          "path": [
+            "Sporting Goods",
+            "Volleyball Gear"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "23806",
+          "title": "Waterskiing & Wakeboarding Equipment",
+          "path": [
+            "Sporting Goods",
+            "Waterskiing & Wakeboarding Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "117165",
+          "title": "Windsurfing Equipment",
+          "path": [
+            "Sporting Goods",
+            "Windsurfing Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "36259",
+          "title": "Winter Sports Equipment",
+          "path": [
+            "Sporting Goods",
+            "Winter Sports Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "261247",
+          "title": "Wrestling Gear",
+          "path": [
+            "Sporting Goods",
+            "Wrestling Gear"
+          ],
+          "depth": 1
+        }
+      ]
+    },
+    "vehicle_accessories": {
+      "title": "Vehicle Parts & Accessories",
+      "category_id": "131090",
+      "leaves": [
+        {
+          "category_id": "179448",
+          "title": "Car Care & Cleaning Products",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "Car Care & Cleaning Products"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "107059",
+          "title": "Car Tuning & Styling Parts",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "Car Tuning & Styling Parts"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "179680",
+          "title": "Car Tyres",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "Car Tyres"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "6747",
+          "title": "Vehicle Clothing, Protection & Merchandise",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "Vehicle Clothing, Protection & Merchandise"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "34998",
+          "title": "Garage Equipment & Tools",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "Garage Equipment & Tools"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "38635",
+          "title": "In-Car Technology, GPS & Security Devices",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "In-Car Technology, GPS & Security Devices"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "49759",
+          "title": "Caravan, Campervan & Motorhome Parts & Accessories",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "Caravan, Campervan & Motorhome Parts & Accessories"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "179487",
+          "title": "Vehicle Oils, Fluids & Lubricants",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "Vehicle Oils, Fluids & Lubricants"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "43962",
+          "title": "ATV, Side-by-Side & UTV Parts & Accessories",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "ATV, Side-by-Side & UTV Parts & Accessories"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "169484",
+          "title": "Aircraft Parts & Accessories",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "Aircraft Parts & Accessories"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "169485",
+          "title": "Boat Parts & Accessories",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "Boat Parts & Accessories"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "82099",
+          "title": "Car Care, Utility & Trailers",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "Car Care, Utility & Trailers"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "36085",
+          "title": "Car Manuals & Literature",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "Car Manuals & Literature"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "169487",
+          "title": "Commercial Vehicle Parts",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "Commercial Vehicle Parts"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "36630",
+          "title": "Disabled Vehicle Parts",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "Disabled Vehicle Parts"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "170140",
+          "title": "Golf Cart Parts & Accessories",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "Golf Cart Parts & Accessories"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "122309",
+          "title": "Military Vehicle Parts",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "Military Vehicle Parts"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "184632",
+          "title": "Motorcycle Repair Manuals & Literature",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "Motorcycle Repair Manuals & Literature"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "96382",
+          "title": "Motorcycle Tuning & Styling Parts",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "Motorcycle Tuning & Styling Parts"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "36631",
+          "title": "Other Vehicle Parts & Accessories",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "Other Vehicle Parts & Accessories"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "262266",
+          "title": "Car Safety & Security Accessories",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "Car Safety & Security Accessories"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "263413",
+          "title": "Sidecars",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "Sidecars"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "122304",
+          "title": "Trials & Motocross Bike Parts",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "Trials & Motocross Bike Parts"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "177599",
+          "title": "Vehicle Services & Repairs",
+          "path": [
+            "Vehicle Parts & Accessories",
+            "Vehicle Services & Repairs"
+          ],
+          "depth": 1
+        }
+      ]
+    },
+    "mobile_phone_accessories": {
+      "title": "Mobile Phones & Communication",
+      "category_id": "15032",
+      "leaves": [
+        {
+          "category_id": "136699",
+          "title": "Dummy Mobile Phones",
+          "path": [
+            "Mobile Phones & Communication",
+            "Dummy Mobile Phones"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "3286",
+          "title": "Home Phones & Accessories",
+          "path": [
+            "Mobile Phones & Communication",
+            "Home Phones & Accessories"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "9355",
+          "title": "Mobile Phones & Smartphones",
+          "path": [
+            "Mobile Phones & Communication",
+            "Mobile Phones & Smartphones"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "9394",
+          "title": "Mobile Phone Accessories",
+          "path": [
+            "Mobile Phones & Communication",
+            "Mobile Phone Accessories"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "43304",
+          "title": "Mobile Phone Parts",
+          "path": [
+            "Mobile Phones & Communication",
+            "Mobile Phone Parts"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "175744",
+          "title": "PDA Accessories",
+          "path": [
+            "Mobile Phones & Communication",
+            "PDA Accessories"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "38331",
+          "title": "PDAs",
+          "path": [
+            "Mobile Phones & Communication",
+            "PDAs"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "146492",
+          "title": "Phone Cards & SIM Cards",
+          "path": [
+            "Mobile Phones & Communication",
+            "Phone Cards & SIM Cards"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "1500",
+          "title": "Radio Communication Equipment",
+          "path": [
+            "Mobile Phones & Communication",
+            "Radio Communication Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "182064",
+          "title": "Smartwatch Accessories",
+          "path": [
+            "Mobile Phones & Communication",
+            "Smartwatch Accessories"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "178893",
+          "title": "Smartwatches",
+          "path": [
+            "Mobile Phones & Communication",
+            "Smartwatches"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "182098",
+          "title": "Vintage Home Phones",
+          "path": [
+            "Mobile Phones & Communication",
+            "Vintage Home Phones"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "182073",
+          "title": "Vintage Mobile Phones",
+          "path": [
+            "Mobile Phones & Communication",
+            "Vintage Mobile Phones"
+          ],
+          "depth": 1
+        }
+      ]
+    },
+    "crafts": {
+      "title": "Crafts",
+      "category_id": "14339",
+      "leaves": [
+        {
+          "category_id": "11783",
+          "title": "Painting, Drawing & Art Supplies",
+          "path": [
+            "Crafts",
+            "Painting, Drawing & Art Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "134304",
+          "title": "Basketry & Chair Caning Supplies",
+          "path": [
+            "Crafts",
+            "Basketry & Chair Caning Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "31723",
+          "title": "Beads & Jewellery Making Supplies",
+          "path": [
+            "Crafts",
+            "Beads & Jewellery Making Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "183683",
+          "title": "Candle Making & Soap Making Supplies",
+          "path": [
+            "Crafts",
+            "Candle Making & Soap Making Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "28145",
+          "title": "Children's Craft Supplies",
+          "path": [
+            "Crafts",
+            "Children's Craft Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "183126",
+          "title": "Decorative & Folk Painting Supplies",
+          "path": [
+            "Crafts",
+            "Decorative & Folk Painting Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "28162",
+          "title": "Fabric",
+          "path": [
+            "Crafts",
+            "Fabric"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "183118",
+          "title": "Fabric Painting & Decorating Supplies",
+          "path": [
+            "Crafts",
+            "Fabric Painting & Decorating Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "16491",
+          "title": "Floral Craft Supplies",
+          "path": [
+            "Crafts",
+            "Floral Craft Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "11786",
+          "title": "Craft Framing & Matting Supplies",
+          "path": [
+            "Crafts",
+            "Craft Framing & Matting Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "3099",
+          "title": "Glass Art Supplies",
+          "path": [
+            "Crafts",
+            "Glass Art Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "57738",
+          "title": "Hand-Crafted Items",
+          "path": [
+            "Crafts",
+            "Hand-Crafted Items"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "28131",
+          "title": "Leathercraft Tools & Supplies",
+          "path": [
+            "Crafts",
+            "Leathercraft Tools & Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "112545",
+          "title": "More Craft Supplies",
+          "path": [
+            "Crafts",
+            "More Craft Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "11787",
+          "title": "Mosaic Supplies",
+          "path": [
+            "Crafts",
+            "Mosaic Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "28102",
+          "title": "Multi-Purpose Craft Supplies",
+          "path": [
+            "Crafts",
+            "Multi-Purpose Craft Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "160706",
+          "title": "Yarn, Sewing & Needlecraft Supplies",
+          "path": [
+            "Crafts",
+            "Yarn, Sewing & Needlecraft Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "3122",
+          "title": "Rubber Stamping Supplies",
+          "path": [
+            "Crafts",
+            "Rubber Stamping Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "11788",
+          "title": "Cardmaking & Scrapbooking Supplies",
+          "path": [
+            "Crafts",
+            "Cardmaking & Scrapbooking Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "183302",
+          "title": "Sculpting, Moulding & Ceramics Craft Supplies",
+          "path": [
+            "Crafts",
+            "Sculpting, Moulding & Ceramics Craft Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "160737",
+          "title": "Sewing Tools & Supplies",
+          "path": [
+            "Crafts",
+            "Sewing Tools & Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "3127",
+          "title": "Craft Woodworking Supplies",
+          "path": [
+            "Crafts",
+            "Craft Woodworking Supplies"
+          ],
+          "depth": 1
+        }
+      ]
+    },
+    "health_beauty": {
+      "title": "Health & Beauty",
+      "category_id": "26395",
+      "leaves": [
+        {
+          "category_id": "11838",
+          "title": "Bath & Body Products",
+          "path": [
+            "Health & Beauty",
+            "Bath & Body Products"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "183497",
+          "title": "Electronic Smoking, Parts & Accessories",
+          "path": [
+            "Health & Beauty",
+            "Electronic Smoking, Parts & Accessories"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "180345",
+          "title": "Fragrances & Aftershaves",
+          "path": [
+            "Health & Beauty",
+            "Fragrances & Aftershaves"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "11854",
+          "title": "Hair Care & Styling Products",
+          "path": [
+            "Health & Beauty",
+            "Hair Care & Styling Products"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "67588",
+          "title": "Healthcare Products",
+          "path": [
+            "Health & Beauty",
+            "Healthcare Products"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "31786",
+          "title": "Make-Up Products",
+          "path": [
+            "Health & Beauty",
+            "Make-Up Products"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "36447",
+          "title": "Massage Supplies & Equipment",
+          "path": [
+            "Health & Beauty",
+            "Massage Supplies & Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "11778",
+          "title": "Medical & Mobility",
+          "path": [
+            "Health & Beauty",
+            "Medical & Mobility"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "47945",
+          "title": "Manicure & Pedicure Supplies",
+          "path": [
+            "Health & Beauty",
+            "Manicure & Pedicure Supplies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "67659",
+          "title": "Natural & Alternative Remedies",
+          "path": [
+            "Health & Beauty",
+            "Natural & Alternative Remedies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "31769",
+          "title": "Oral & Dental Care Products",
+          "path": [
+            "Health & Beauty",
+            "Oral & Dental Care Products"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "1277",
+          "title": "Other Health & Beauty Products",
+          "path": [
+            "Health & Beauty",
+            "Other Health & Beauty Products"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "177731",
+          "title": "Salon & Spa Equipment",
+          "path": [
+            "Health & Beauty",
+            "Salon & Spa Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "31762",
+          "title": "Shaving & Hair Removal Products & Equipment",
+          "path": [
+            "Health & Beauty",
+            "Shaving & Hair Removal Products & Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "11863",
+          "title": "Skin Care Products",
+          "path": [
+            "Health & Beauty",
+            "Skin Care Products"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "31772",
+          "title": "Sun Care & Tanning Products",
+          "path": [
+            "Health & Beauty",
+            "Sun Care & Tanning Products"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "33914",
+          "title": "Tattoos & Body Art Supplies & Equipment",
+          "path": [
+            "Health & Beauty",
+            "Tattoos & Body Art Supplies & Equipment"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "31414",
+          "title": "Vision Care Products",
+          "path": [
+            "Health & Beauty",
+            "Vision Care Products"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "180959",
+          "title": "Vitamins & Lifestyle Supplements",
+          "path": [
+            "Health & Beauty",
+            "Vitamins & Lifestyle Supplements"
+          ],
+          "depth": 1
+        }
+      ]
+    },
+    "toys_games": {
+      "title": "Toys & Games",
+      "category_id": "220",
+      "leaves": [
+        {
+          "category_id": "246",
+          "title": "Action Figures & Accessories",
+          "path": [
+            "Toys & Games",
+            "Action Figures & Accessories"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "49019",
+          "title": "Beanies",
+          "path": [
+            "Toys & Games",
+            "Beanies"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "183446",
+          "title": "Construction & Building Toys",
+          "path": [
+            "Toys & Games",
+            "Construction & Building Toys"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "80546",
+          "title": "Creative Toys & Activities",
+          "path": [
+            "Toys & Games",
+            "Creative Toys & Activities"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "222",
+          "title": "Diecast Vehicles, Parts & Accessories",
+          "path": [
+            "Toys & Games",
+            "Diecast Vehicles, Parts & Accessories"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "11731",
+          "title": "Educational Toys",
+          "path": [
+            "Toys & Games",
+            "Educational Toys"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "1082",
+          "title": "Electronic Toy Pets",
+          "path": [
+            "Toys & Games",
+            "Electronic Toy Pets"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "767",
+          "title": "Fast Food, Cereal & Sweets Toys",
+          "path": [
+            "Toys & Games",
+            "Fast Food, Cereal & Sweets Toys"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "233",
+          "title": "Games",
+          "path": [
+            "Toys & Games",
+            "Games"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "2613",
+          "title": "Jigsaws & Puzzles",
+          "path": [
+            "Toys & Games",
+            "Jigsaws & Puzzles"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "1188",
+          "title": "Toy Models & Kits",
+          "path": [
+            "Toys & Games",
+            "Toy Models & Kits"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "1039",
+          "title": "Other Toys & Games",
+          "path": [
+            "Toys & Games",
+            "Other Toys & Games"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "11743",
+          "title": "Outdoor Toys & Activities",
+          "path": [
+            "Toys & Games",
+            "Outdoor Toys & Activities"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "19169",
+          "title": "Preschool Toys & Pretend Play",
+          "path": [
+            "Toys & Games",
+            "Preschool Toys & Pretend Play"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "2562",
+          "title": "RC Model Vehicles & Remote-Controlled Toys",
+          "path": [
+            "Toys & Games",
+            "RC Model Vehicles & Remote-Controlled Toys"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "2616",
+          "title": "Scalextric & Slot Cars",
+          "path": [
+            "Toys & Games",
+            "Scalextric & Slot Cars"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "436",
+          "title": "Soft Toys & Stuffed Animals",
+          "path": [
+            "Toys & Games",
+            "Soft Toys & Stuffed Animals"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "14737",
+          "title": "Steam Toys",
+          "path": [
+            "Toys & Games",
+            "Steam Toys"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "2631",
+          "title": "Toy Soldiers",
+          "path": [
+            "Toys & Games",
+            "Toy Soldiers"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "717",
+          "title": "Vintage & Classic Toys",
+          "path": [
+            "Toys & Games",
+            "Vintage & Classic Toys"
+          ],
+          "depth": 1
+        },
+        {
+          "category_id": "16486",
+          "title": "Wargames & Role-Playing Games",
+          "path": [
+            "Toys & Games",
+            "Wargames & Role-Playing Games"
+          ],
+          "depth": 1
+        }
+      ]
+    }
+  }
+}
