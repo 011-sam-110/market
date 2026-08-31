@@ -15,12 +15,12 @@
  * explains a refusal is the product, so rewording it would change the claim.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Bars, Composition, Locked, type BarDatum, type Segment } from "../components/charts";
 import { Figure } from "../components/Figure";
 import { Stamp } from "../components/Stamp";
-import { dictValue } from "../lib/data";
+import { dictValue, loadDeltaDetail } from "../lib/data";
 import {
   bandLabel,
   bpPercent,
@@ -34,6 +34,7 @@ import type {
   Bundle,
   Comparability,
   DeltaAggregate,
+  DeltaDetailPayload,
   DeltasPayload,
 } from "../lib/types";
 import type { ViewProps } from "../lib/viewProps";
@@ -355,6 +356,40 @@ function Steps({
   );
 }
 
+/* One of the two sections that need the detail file, in whichever state it
+ * is in. Never a zero and never an empty list while the fetch is in flight:
+ * an empty movers list means "the pipeline found no product whose counter
+ * moved", which is a real and different claim. */
+function Detail({
+  detail,
+  error,
+  what,
+  children,
+}: {
+  detail: DeltaDetailPayload | null;
+  error: string | null;
+  what: string;
+  children: () => React.ReactNode;
+}) {
+  if (error !== null) {
+    return (
+      <div className="state state--inline">
+        <h4 className="state__title">{what} did not load</h4>
+        <p className="state__body">{error}</p>
+      </div>
+    );
+  }
+  if (detail === null) {
+    return (
+      <p className="panel__note trends-pending">
+        Loading {what}. This part of the difference is one file on its own,
+        because it is the part that grows with the population.
+      </p>
+    );
+  }
+  return <>{children()}</>;
+}
+
 /** A sentence the pipeline wrote, marked as quoted and never reworded. */
 function Quote({ children }: { children: React.ReactNode }) {
   return <blockquote className="trends-quote">{children}</blockquote>;
@@ -543,6 +578,35 @@ function DayPair({ bundle, deltas }: { bundle: Bundle; deltas: DeltasPayload }) 
   const { manifest } = bundle;
   const [allNiches, setAllNiches] = useState(false);
 
+  /* The per-listing arrays and the per-product aggregates. They are the two
+   * parts of a difference that grow with the population, and the board loads
+   * the deltas summary before it paints anything, so they live in their own
+   * file and only this view fetches it.
+   *
+   * Every section below that needs them says so while it waits, and says so
+   * if the fetch fails. None of them falls back to a zero: "not loaded yet"
+   * and "measured, and it is nothing" are different claims, and this board
+   * has spent its whole design keeping them apart. */
+  const [detail, setDetail] = useState<DeltaDetailPayload | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    setDetail(null);
+    setDetailError(null);
+    loadDeltaDetail(deltas.detail_file).then(
+      (d) => {
+        if (live) setDetail(d);
+      },
+      (err: unknown) => {
+        if (live) setDetailError(err instanceof Error ? err.message : String(err));
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [deltas.detail_file]);
+
   const churn = readChurn(panelData(bundle, "population_churn"));
   const sellers = readSellers(panelData(bundle, "seller_entry_exit"));
   const drift = readDrift(panelData(bundle, "price_drift"));
@@ -557,8 +621,9 @@ function DayPair({ bundle, deltas }: { bundle: Bundle; deltas: DeltasPayload }) 
    * could difference. Every listing it could not difference carries exactly
    * 1.0, which is the window label rather than a measurement. */
   const gap = useMemo(() => {
+    if (detail === null) return null;
     const unknownIndex = deltas.buckets.indexOf("unknown");
-    const { bucket, days } = deltas.listings;
+    const { bucket, days } = detail.listings;
     const values: number[] = [];
     for (let i = 0; i < bucket.length; i += 1) {
       const b = bucket[i];
@@ -575,7 +640,7 @@ function DayPair({ bundle, deltas }: { bundle: Bundle; deltas: DeltasPayload }) 
       max: values[values.length - 1] ?? 0,
       median: mid ?? 0,
     };
-  }, [deltas]);
+  }, [deltas, detail]);
 
   /* Two sums, never one. The view keeps them apart at every stage, including
    * the stage that computes them. */
@@ -620,18 +685,20 @@ function DayPair({ bundle, deltas }: { bundle: Bundle; deltas: DeltasPayload }) 
     return map;
   }, [bundle.products]);
 
+  const byProduct = detail?.by_product ?? [];
+
   const productsUp = useMemo(
     () =>
-      deltas.by_product
+      byProduct
         .filter((a) => a.sum_delta_known_positive > 0)
         .sort((a, b) => b.sum_delta_known_positive - a.sum_delta_known_positive)
         .slice(0, PRODUCTS_HEAD),
-    [deltas],
+    [byProduct],
   );
 
   const productsDown = useMemo(
     () =>
-      deltas.by_product
+      byProduct
         .filter((a) => a.sum_delta_known_negative < 0)
         .sort((a, b) => a.sum_delta_known_negative - b.sum_delta_known_negative)
         .slice(0, PRODUCTS_HEAD),
@@ -644,8 +711,8 @@ function DayPair({ bundle, deltas }: { bundle: Bundle; deltas: DeltasPayload }) 
   );
 
   const productCovered = useMemo(
-    () => deltas.by_product.reduce((total, a) => total + bucketTotal(a), 0),
-    [deltas],
+    () => byProduct.reduce((total, a) => total + bucketTotal(a), 0),
+    [byProduct],
   );
 
   const bucketSum =
@@ -1130,34 +1197,42 @@ function DayPair({ bundle, deltas }: { bundle: Bundle; deltas: DeltasPayload }) 
           eBay's sold counter is not monotonic, so read the quoted mechanism
           above before you treat one of these as demand.
         </p>
-        <ol className="fanfold trends-movers">
-          {productsUp.map((a, i) => (
-            <MoverRow
-              key={a.key}
-              rank={i + 1}
-              title={productLabel.get(a.key) ?? a.key}
-              productKey={a.key}
-              value={signed(a.sum_delta_known_positive)}
-              denominator={a.counts.known_positive}
-              population={bucketTotal(a)}
-            />
-          ))}
-        </ol>
+        <Detail detail={detail} error={detailError} what="the product movers">
+          {() => (
+            <ol className="fanfold trends-movers">
+              {productsUp.map((a, i) => (
+                <MoverRow
+                  key={a.key}
+                  rank={i + 1}
+                  title={productLabel.get(a.key) ?? a.key}
+                  productKey={a.key}
+                  value={signed(a.sum_delta_known_positive)}
+                  denominator={a.counts.known_positive}
+                  population={bucketTotal(a)}
+                />
+              ))}
+            </ol>
+          )}
+        </Detail>
 
         <h4 className="trends-sub">Products where the sold counter decreased</h4>
-        <ol className="fanfold trends-movers trends-movers--decrease">
-          {productsDown.map((a, i) => (
-            <MoverRow
-              key={a.key}
-              rank={i + 1}
-              title={productLabel.get(a.key) ?? a.key}
-              productKey={a.key}
-              value={signed(a.sum_delta_known_negative)}
-              denominator={a.counts.known_negative}
-              population={bucketTotal(a)}
-            />
-          ))}
-        </ol>
+        <Detail detail={detail} error={detailError} what="the product movers">
+          {() => (
+            <ol className="fanfold trends-movers trends-movers--decrease">
+              {productsDown.map((a, i) => (
+                <MoverRow
+                  key={a.key}
+                  rank={i + 1}
+                  title={productLabel.get(a.key) ?? a.key}
+                  productKey={a.key}
+                  value={signed(a.sum_delta_known_negative)}
+                  denominator={a.counts.known_negative}
+                  population={bucketTotal(a)}
+                />
+              ))}
+            </ol>
+          )}
+        </Detail>
 
         <h4 className="trends-sub">Groups the pipeline pruned</h4>
         <p className="panel__note">
@@ -1178,9 +1253,14 @@ function DayPair({ bundle, deltas }: { bundle: Bundle; deltas: DeltasPayload }) 
         <p className="panel__note">
           The {fmt(deltas.by_niche.length)} niche groups shown above cover{" "}
           {fmt(nicheCovered)} of the {fmt(deltas.n_listings)} listings
-          considered. The {fmt(deltas.by_product.length)} product groups cover{" "}
-          {fmt(productCovered)}. The pipeline reports no delta for the
-          remainder, and this view prints none.
+          considered.{" "}
+          {detail === null
+            ? `The ${fmt(deltas.n_detail_products)} product groups are still loading.`
+            : `The ${fmt(byProduct.length)} product groups cover ${fmt(
+                productCovered,
+              )}.`}{" "}
+          The pipeline reports no delta for the remainder, and this view prints
+          none.
         </p>
       </section>
 

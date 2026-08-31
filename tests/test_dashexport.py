@@ -32,6 +32,7 @@ from phoneloop.dashexport import (
     dumps,
     encode_listings,
     export_coverage,
+    export_delta_detail,
     export_deltas,
     export_fees,
     export_knobs,
@@ -382,12 +383,57 @@ def test_a_falling_sold_counter_is_reported_not_hidden(b):
 
 
 def test_omitted_delta_aggregates_are_counted_not_silent(b):
+    """The two aggregate lists now live in two files, and the omitted counts
+    stay in the summary. They still have to describe the list they belong to
+    -- an "of" that no longer covers the rows shipped beside it would let a
+    reader infer a delta of zero for groups that carry none."""
     payload = export_deltas(b)
+    detail = export_delta_detail(b)
+    shipped = {"niche": payload["by_niche"], "product": detail["by_product"]}
+
     omitted = payload["aggregates_omitted"]
     assert set(omitted) >= {"niche", "product"}
     for scope in ("niche", "product"):
         assert omitted[scope]["omitted"] >= 0
-        assert omitted[scope]["of"] >= len(payload[f"by_{scope}"])
+        assert omitted[scope]["of"] >= len(shipped[scope])
+
+
+def test_the_summary_names_the_detail_it_left_out(b):
+    """A count the board prints while the detail is still arriving. Without
+    it the Change view has nothing honest to say between first paint and the
+    second fetch, and "0 product groups" is the wrong thing to say."""
+    payload = export_deltas(b)
+    detail = export_delta_detail(b)
+
+    assert payload["detail_file"] == (
+        f"delta-detail-{payload['date_a']}-{payload['date_b']}.json")
+    assert payload["n_detail_products"] == len(detail["by_product"])
+    assert payload["n_detail_listings"] == len(detail["listings"]["source_id"])
+
+
+def test_the_summary_carries_no_per_listing_array(b):
+    """The whole point of the split. The board loads the summary before it
+    paints anything, so an array that grows with the population must not be
+    in it -- and a later change that quietly puts one back would restore the
+    first-paint cost with nothing to show for it."""
+    payload = export_deltas(b)
+
+    assert "listings" not in payload
+    assert "by_product" not in payload
+    assert not any(k.startswith("_") for k in payload), (
+        "the detail is carried through an underscore key internally and must "
+        "never be written to the shipped summary")
+
+
+def test_the_two_files_describe_the_same_day_pair(b):
+    """Two files, one difference. The detail is lifted out of the summary
+    rather than recomputed, and this is what says so."""
+    payload = export_deltas(b)
+    detail = export_delta_detail(b)
+
+    assert (detail["date_a"], detail["date_b"]) == (payload["date_a"],
+                                                    payload["date_b"])
+    assert detail["state"] == payload["state"]
 
 
 # --- fees ---------------------------------------------------------------------

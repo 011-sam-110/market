@@ -56,6 +56,17 @@ def _human(n: int) -> str:
     return f"{n} B"
 
 
+# What the board can actually load before it paints. Measured against the
+# 2026-08-30 bundle, which is 21.17 MB raw across nine files for 29,824
+# listings and takes a visible pause to appear.
+#
+# These are not a limit on the store. They are the point at which the browser
+# stops being the right place to hold the whole market, and the export says
+# so rather than letting a bigger sweep quietly produce an unusable board.
+TOTAL_BUDGET_BYTES = 32 * 1024 * 1024
+FILE_BUDGET_BYTES = 12 * 1024 * 1024
+
+
 def main(argv: list[str] | None = None) -> int:
     repo = Path(__file__).resolve().parent.parent
     parser = argparse.ArgumentParser(
@@ -91,7 +102,8 @@ def main(argv: list[str] | None = None) -> int:
     def emit(name: str, payload: object) -> None:
         size = dashexport.write_json(out_dir / name, payload, indent=args.indent)
         written.append((name, size))
-        print(f"  {name:<34} {_human(size):>10}", flush=True)
+        flag = "  OVER BUDGET" if size > FILE_BUDGET_BYTES else ""
+        print(f"  {name:<34} {_human(size):>10}{flag}", flush=True)
 
     emit("manifest.json", dashexport.build_manifest(
         b, git_sha=_git_sha(repo), generated_at=generated_at,
@@ -105,8 +117,14 @@ def main(argv: list[str] | None = None) -> int:
     emit(f"coverage-{day}.json", dashexport.export_coverage(b))
 
     if b.diff is not None:
-        emit(f"deltas-{b.diff.date_a.isoformat()}-{b.diff.date_b.isoformat()}.json",
+        pair = f"{b.diff.date_a.isoformat()}-{b.diff.date_b.isoformat()}"
+        emit(f"deltas-{pair}.json",
              dashexport.round_floats(dashexport.export_deltas(b)))
+        # The per-listing and per-product arrays, in their own file. Only the
+        # Change view reads them, and the board loads the summary above
+        # before it paints anything.
+        emit(f"delta-detail-{pair}.json",
+             dashexport.round_floats(dashexport.export_delta_detail(b)))
     else:
         emit("deltas.json", dashexport.export_deltas(b))
 
@@ -118,6 +136,31 @@ def main(argv: list[str] | None = None) -> int:
 
     total = sum(size for _n, size in written)
     print(f"\n  {'TOTAL':<34} {_human(total):>10}   ({len(written)} files)")
+
+    # Every payload here is O(listings) and nothing in it is sampled or
+    # capped, which is the right default and the reason a scale change can
+    # break the board silently. Raising the leaf set ten-fold does not fail
+    # this export -- it writes a bundle no browser will load, and the only
+    # symptom is a board that never finishes its first paint.
+    #
+    # So the budget is stated, checked, and printed. It does not stop the
+    # export: a bundle that is too big is still the truth about a store that
+    # got bigger, and refusing to write it would leave the board serving
+    # yesterday with nothing to say about why. It fails LOUDLY instead, and
+    # names the payloads to shard first.
+    over = [(n, size) for n, size in written if size > FILE_BUDGET_BYTES]
+    if total > TOTAL_BUDGET_BYTES or over:
+        print(f"\n  OVER BUDGET. The bundle is {_human(total)} against a "
+              f"{_human(TOTAL_BUDGET_BYTES)} budget"
+              + (f", and {len(over)} file(s) exceed "
+                 f"{_human(FILE_BUDGET_BYTES)} on their own" if over else "")
+              + ".")
+        for name, size in sorted(over, key=lambda x: -x[1]):
+            print(f"    {name:<34} {_human(size):>10}")
+        print("  The board loads the whole bundle before it paints anything, "
+              "so this is a board that hangs, not a board that is slow.")
+        print("  Shard the payloads above by leaf, or ship a ranked head and "
+              "load the tail on demand. Do not sample them silently.")
     return 0
 
 

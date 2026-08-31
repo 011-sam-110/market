@@ -397,3 +397,20 @@
 .verdict__row--more dd {
   color: var(--ink-3);
 }
+
+/* --- a part of the difference that is still arriving -------------------- */
+/* Set apart from a panel note so it does not read as a finding. It is a
+ * statement about this page, not about the market. */
+
+.trends-pending {
+  padding-left: var(--s3);
+  border-left: 2px solid var(--rule-faint);
+  color: var(--ink-3);
+}
+
+.state--inline {
+  margin-top: var(--s3);
+  padding: var(--s3) var(--s4);
+  background: var(--fail-wash);
+  border-left: 3px solid var(--fail);
+}

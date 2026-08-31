@@ -340,7 +340,13 @@ export interface DeltasPayload {
   counts: DeltaCounts;
   note: string;
   by_niche: DeltaAggregate[];
-  by_product: DeltaAggregate[];
+  /* The per-listing arrays and the per-product aggregates live in their own
+   * file. They are the two parts of this payload that grow with the
+   * population, only the Change view reads them, and the board loads this
+   * file before it paints anything. */
+  detail_file: string;
+  n_detail_listings: number;
+  n_detail_products: number;
   aggregates_omitted: { niche: number; product: number; reason: string };
   sell_through_comparable: {
     comparable: boolean;
@@ -349,6 +355,17 @@ export interface DeltasPayload {
     min_comparable_days: number;
     note: string;
   };
+}
+
+/* The heavy half of one day-pair difference, fetched only by the Change
+ * view. Every count in `DeltasPayload` is computed over the whole
+ * population, so nothing here is a denominator for anything there. */
+export interface DeltaDetailPayload {
+  state: "live" | "locked" | "unavailable";
+  date_a: string;
+  date_b: string;
+  note: string;
+  by_product: DeltaAggregate[];
   listings: {
     source_id: string[];
     sold_a: (number | null)[];

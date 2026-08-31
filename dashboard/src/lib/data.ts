@@ -25,6 +25,7 @@ import type {
   Manifest,
   NichesPayload,
   ProductRow,
+  DeltaDetailPayload,
   ProductsPayload,
 } from "./types";
 import type { KnobName, Knobs } from "./knobs";
@@ -71,6 +72,15 @@ export async function loadBundle(): Promise<Bundle> {
       : null;
 
   return { manifest, knobs, fees, niches, products, coverage, deltas };
+}
+
+/** The per-listing arrays and per-product aggregates of one day pair.
+ *
+ * `DeltasPayload.detail_file` names it, rather than this rebuilding the name
+ * from two dates: the exporter owns that naming, and a second copy of the
+ * rule here is a second place for it to drift. */
+export function loadDeltaDetail(file: string): Promise<DeltaDetailPayload> {
+  return getJSON<DeltaDetailPayload>(file);
 }
 
 export function loadListings(latestDate: string): Promise<ListingsPayload> {

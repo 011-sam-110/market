@@ -248,7 +248,32 @@ def _zero_counts() -> dict[str, int]:
     return {b: 0 for b in _DELTA_BUCKETS}
 
 
-def export_deltas(b: Build) -> dict:
+def export_delta_detail(b: Build) -> dict:
+    """The per-listing and per-product arrays `export_deltas` leaves out.
+
+    Same computation, same disjoint buckets, same precedence -- this calls
+    `export_deltas` and lifts the two heavy keys out of it rather than
+    recomputing them, because two code paths over the same day-pair is
+    exactly how the summary and the detail come to disagree.
+    """
+    full = export_deltas(b, _with_detail=True)
+    if full.get("state") != "live":
+        return {"state": full.get("state", "locked"),
+                "reason": full.get("reason", ""),
+                "listings": {}, "by_product": []}
+    return {
+        "state": "live",
+        "date_a": full["date_a"],
+        "date_b": full["date_b"],
+        "listings": full["_detail_listings"],
+        "by_product": full["_detail_by_product"],
+        "note": "The arrays lifted out of the deltas summary. Every count in "
+                "that file is computed over the whole population, so nothing "
+                "here is a denominator for anything there.",
+    }
+
+
+def export_deltas(b: Build, *, _with_detail: bool = False) -> dict:
     """Day-over-day sold movement, per listing and aggregated.
 
     Aggregated two ways, per niche and per product, each carrying the four
@@ -360,16 +385,30 @@ def export_deltas(b: Build) -> dict:
                              "known_positive; disjoint, so the four counts sum "
                              "to n_listings",
         "counts": totals,
-        "listings": {
-            "source_id": ids,
-            "sold_a": sold_a,
-            "sold_b": sold_b,
-            "delta_sold": delta,
-            "days": days,
-            "bucket": bucket_idx,
-        },
+        # `listings` and `by_product` are NOT here. They are the two arrays
+        # that grow with the population -- 1.49 MB and 1.47 MB of a 2.77 MB
+        # payload at 29,824 listings -- and only the Change view reads them,
+        # while four views read the aggregates around them. The board loads
+        # this file before it paints anything, so a per-listing array in it
+        # is a first-paint cost the other five views pay for nothing.
+        #
+        # `export_delta_detail` writes them beside this, and the Change view
+        # fetches that on demand. The counts here are computed over the FULL
+        # population either way, so nothing below is a subtotal of what the
+        # detail happens to carry.
+        **({"_detail_listings": {
+                "source_id": ids,
+                "sold_a": sold_a,
+                "sold_b": sold_b,
+                "delta_sold": delta,
+                "days": days,
+                "bucket": bucket_idx,
+            },
+            "_detail_by_product": product_rows} if _with_detail else {}),
+        "detail_file": f"delta-detail-{diff.date_a}-{diff.date_b}.json",
+        "n_detail_listings": len(ids),
+        "n_detail_products": len(product_rows),
         "by_niche": niche_rows,
-        "by_product": product_rows,
         "aggregates_omitted": {
             "niche": {"omitted": niche_dropped, "of": len(by_niche)},
             "product": {"omitted": product_dropped, "of": len(by_product)},

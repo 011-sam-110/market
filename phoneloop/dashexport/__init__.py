@@ -37,7 +37,9 @@ from phoneloop.dashexport.board_export import (  # noqa: E402
     export_niches,
     product_payloads,
 )
-from phoneloop.dashexport.columnar import encode_listings, export_deltas  # noqa: E402
+from phoneloop.dashexport.columnar import (  # noqa: E402
+    encode_listings, export_delta_detail, export_deltas,
+)
 from phoneloop.dashexport.coverage import export_coverage  # noqa: E402
 from phoneloop.dashexport.golden import build_golden  # noqa: E402
 from phoneloop.dashexport.jsonio import dumps, round_floats, write_json  # noqa: E402
@@ -50,6 +52,7 @@ __all__ = [
     "dumps",
     "encode_listings",
     "export_coverage",
+    "export_delta_detail",
     "export_deltas",
     "export_fees",
     "export_knobs",
