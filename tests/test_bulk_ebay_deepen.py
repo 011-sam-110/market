@@ -75,3 +75,100 @@ class TestRowsToDeepen:
         new = _row("1", seller_type="business", seen_at=datetime(2026, 8, 20, tzinfo=UTC))
         store.record([new])
         assert bulk_ebay.rows_to_deepen(store, limit=10) == []
+
+
+class TestTheCircuitBreaker:
+    """A deepen budget of several thousand runs for hours unattended.
+
+    Each item-page failure is caught and skipped, which is right for an item
+    eBay happens to refuse and wrong for an eBay that has started refusing
+    everything. These pin the difference.
+
+    `offline=True` keeps a browser from opening, and `recorded` is replaced
+    by a direct call to the producer so the harness does not intercept. That
+    leaves `fetch_item` as the single failure injection point, which is the
+    same path a live block takes.
+    """
+
+    def _stub(self, monkeypatch, fetch):
+        monkeypatch.setattr(bulk_ebay, "recorded",
+                            lambda _c, _k, _n, produce, **_kw: produce())
+        monkeypatch.setattr(bulk_ebay, "fetch_item", fetch)
+        monkeypatch.setattr(bulk_ebay.ebay_item, "parse_item",
+                            lambda *a, **k: object())
+        monkeypatch.setattr(bulk_ebay.ebay_item, "to_row_updates",
+                            lambda *a, **k: {"seller_type": "business"})
+
+    def _store(self, tmp_path, n):
+        store = MarketStore(tmp_path)
+        store.record([_row(str(i)) for i in range(n)])
+        return store
+
+    def _run(self, store, tmp_path, limit):
+        return bulk_ebay.run_deepen(
+            store, bulk_ebay.Cassette(tmp_path / "fixtures"),
+            offline=True, limit=limit, headless=True, direct=True)
+
+    def test_a_sustained_block_stops_the_run(self, tmp_path, monkeypatch, capsys):
+        """Without this, a 5,000-item budget spends hours fetching nothing
+        and reports "deepened 0/5000" at the end of it."""
+        calls = {"n": 0}
+
+        def fetch(_page, _url):
+            calls["n"] += 1
+            raise RuntimeError("Something went wrong on our end")
+
+        self._stub(monkeypatch, fetch)
+        store = self._store(tmp_path, 200)
+        code = self._run(store, tmp_path, 200)
+        out = capsys.readouterr().out
+
+        assert calls["n"] == bulk_ebay.MAX_CONSECUTIVE_FAILURES
+        assert "STOPPED EARLY" in out
+        assert "25 attempted and refused, 175 never attempted" in out
+        assert code == 0, (
+            "a partial deepen must not abort the rest of the nightly "
+            "pipeline -- the rows it did deepen are real and already stored")
+
+    def test_scattered_failures_do_not_stop_it(self, tmp_path, monkeypatch, capsys):
+        """One refused item is normal. The breaker must not fire on noise,
+        or a single awkward listing would end the night's budget."""
+        calls = {"n": 0}
+
+        def fetch(_page, url):
+            calls["n"] += 1
+            if calls["n"] % 5 == 0:
+                raise RuntimeError("Something went wrong on our end")
+            return {"text": f"item {url}", "html": "", "url": url}
+
+        self._stub(monkeypatch, fetch)
+        store = self._store(tmp_path, 60)
+        self._run(store, tmp_path, 60)
+        out = capsys.readouterr().out
+
+        assert calls["n"] == 60, "every candidate must still be attempted"
+        assert "STOPPED EARLY" not in out
+        assert "deepened 48/60" in out
+
+    def test_a_success_resets_the_streak(self, tmp_path, monkeypatch, capsys):
+        """24 failures, one success, then failures again is not a sustained
+        block until the second streak completes. A counter that never reset
+        would have stopped during the first."""
+        cap = bulk_ebay.MAX_CONSECUTIVE_FAILURES
+        calls = {"n": 0}
+
+        def fetch(_page, url):
+            calls["n"] += 1
+            if calls["n"] == cap:          # one success just before the cap
+                return {"text": f"item {url}", "html": "", "url": url}
+            raise RuntimeError("Something went wrong on our end")
+
+        self._stub(monkeypatch, fetch)
+        store = self._store(tmp_path, 200)
+        self._run(store, tmp_path, 200)
+        out = capsys.readouterr().out
+
+        # 24 failures, 1 success, then a full fresh streak of 25.
+        assert calls["n"] == (cap - 1) + 1 + cap
+        assert "STOPPED EARLY" in out
+        assert "deepened 1/200" in out

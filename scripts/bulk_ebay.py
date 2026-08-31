@@ -128,6 +128,8 @@ if hasattr(sys.stdout, "reconfigure"):
 
 PAUSE_S = 4.0
 NAV_TIMEOUT_MS = 75000
+# Consecutive item-page failures that end a deepen run. See run_deepen.
+MAX_CONSECUTIVE_FAILURES = 25
 # ceil(catalog.result_cap("ebay") / 240) -- the page budget a single shard
 # could ever need before it is either saturated or exhausted.
 MAX_PAGE = 42
@@ -398,6 +400,18 @@ def run_deepen(store: MarketStore, cassette: Cassette, *, offline: bool,
         return 0
 
     deepened = 0
+    # A sustained block must stop the run, not be absorbed one item at a
+    # time. Each failure below is caught and skipped, which is right for an
+    # item eBay happens to refuse -- and wrong for an eBay that has started
+    # refusing everything. Without this, a budget of several thousand burns
+    # itself down fetching nothing, prints a BLOCKED line per item, and
+    # finishes reporting "deepened 0/5000" after hours of it.
+    #
+    # 25 is deliberately well above the worst clean run measured: the
+    # 2026-08-30 nightly deepened 200 of 200 with no failure at all. A real
+    # streak of 25 is not bad luck.
+    consecutive_failures = 0
+    stopped_early = ""
     with contextlib.ExitStack() as stack:
         page = None
         if not offline:
@@ -408,7 +422,9 @@ def run_deepen(store: MarketStore, cassette: Cassette, *, offline: bool,
             stack.callback(lambda: browser.close())
             print(f"egress: {'proxy' if used_proxy else 'DIRECT'}")
 
+        attempted = 0
         for row in candidates:
+            attempted += 1
             url = row["url"]
             try:
                 data = recorded(cassette, "ebay_item", f"item:{url}",
@@ -420,7 +436,15 @@ def run_deepen(store: MarketStore, cassette: Cassette, *, offline: bool,
                 raise
             except Exception as exc:                     # noqa: BLE001
                 print(f"   {url} -> BLOCKED {str(exc)[:80]}")
+                consecutive_failures += 1
+                if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                    stopped_early = (
+                        f"{consecutive_failures} item pages failed in a row. "
+                        "Stopped rather than spend the rest of the budget on "
+                        "a source that is refusing this session.")
+                    break
                 continue
+            consecutive_failures = 0
 
             item = ebay_item.parse_item(data.get("text", ""),
                                         html=data.get("html", ""),
@@ -450,6 +474,20 @@ def run_deepen(store: MarketStore, cassette: Cassette, *, offline: bool,
             print(f"   {url} -> {sorted(updates)} (+{written} stored)")
 
     print(f"\ndeepened {deepened}/{len(candidates)} listings")
+    if stopped_early:
+        # Exit 0 on purpose. Every row deepened before the stop is real and
+        # already in the store, the board is still worth building on it, and
+        # a non-zero here would abort the rest of the nightly pipeline. The
+        # shortfall is not hidden: it prints here, and the board's own deepen
+        # coverage figure carries its denominator, so a short night reads as
+        # a short night rather than as a market with no margins.
+        print(f"STOPPED EARLY: {stopped_early}")
+        # Three different numbers, and merging any two of them overstates
+        # something. `attempted - deepened` were tried and refused;
+        # `len(candidates) - attempted` were never reached at all.
+        print(f"{attempted - deepened} attempted and refused, "
+              f"{len(candidates) - attempted} never attempted. "
+              "Both keep their place in tomorrow's batch.")
     return 0
 
 
