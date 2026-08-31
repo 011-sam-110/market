@@ -28,13 +28,25 @@ Key shape, as `bulk_ebay.py` writes it:
 "swept, genuinely nothing there". A blocked shard is left OUT of `done`
 entirely and recorded in `blocked`. Both distinctions matter here: a leaf that
 returned nothing was still measured, and a leaf that was blocked was not.
+
+**Not every population change reaches the shard keys.** A key carries the
+leaf, the band and the page, so a change to those three is visible here by
+construction. The results VIEW is not in the key and changes what a page
+returns: measured 2026-08-31, one leaf came back with a seller line on 97.3%
+of rows in list view and 3.1% in gallery, under identical shard keys. So
+`bulk_ebay.py` writes a `sweep` block naming the view, the configured
+`pages_per_shard` and the price band, and `compare` refuses to certify a pair
+whose sweep blocks disagree. A night written before that block existed reads
+as an unknown shape, not as a match -- two such nights still compare (neither
+is known, and nothing distinguishes them), but an unknown against a known
+does not.
 """
 
 from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
@@ -75,6 +87,16 @@ class Footprint:
     unrecognised: tuple[str, ...]
     #: True when this night wrote a checkpoint at all
     found: bool
+    #: the `sweep` block verbatim -- view, pages_per_shard, price_band.
+    #: Empty for a night written before bulk_ebay.py recorded one, which is
+    #: "shape unknown", never "shape matched".
+    sweep: dict = field(default_factory=dict)
+
+    @property
+    def view(self) -> str | None:
+        """The results view this night swept in, or None when unrecorded."""
+        v = self.sweep.get("view")
+        return v if isinstance(v, str) else None
 
     @property
     def n_leaves(self) -> int:
@@ -99,6 +121,7 @@ class Footprint:
             "shards_done": self.shards_done,
             "n_blocked": len(self.blocked),
             "unrecognised": list(self.unrecognised),
+            "sweep": dict(self.sweep),
         }
 
 
@@ -120,6 +143,8 @@ class Comparability:
     leaves_removed: tuple[str, ...]
     #: leaf id -> (pages on a, pages on b), for leaves whose depth moved
     depth_changed: dict[str, tuple[int, int]]
+    #: field name -> (value on a, value on b), for sweep settings that moved
+    sweep_changed: dict[str, tuple[object, object]]
     #: one sentence, in the board's own voice, or "" when comparable
     note: str
 
@@ -135,6 +160,7 @@ class Comparability:
             "leaves_added": list(self.leaves_added),
             "leaves_removed": list(self.leaves_removed),
             "depth_changed": {k: list(v) for k, v in self.depth_changed.items()},
+            "sweep_changed": {k: list(v) for k, v in self.sweep_changed.items()},
             "note": self.note,
         }
 
@@ -172,6 +198,7 @@ def parse_checkpoint(payload: dict, day: date) -> Footprint:
             rows[leaf] = rows.get(leaf, 0) + value
 
     blocked = payload.get("blocked") or {}
+    sweep = payload.get("sweep")
     return Footprint(
         day=day,
         pages=pages,
@@ -179,6 +206,7 @@ def parse_checkpoint(payload: dict, day: date) -> Footprint:
         blocked=dict(blocked) if isinstance(blocked, dict) else {},
         unrecognised=tuple(sorted(unrecognised)),
         found=True,
+        sweep=dict(sweep) if isinstance(sweep, dict) else {},
     )
 
 
@@ -205,17 +233,29 @@ def read_footprint(data_dir: Path | str, day: date) -> Footprint:
     return parse_checkpoint(payload, day)
 
 
+def _shape(value: object) -> str:
+    """A sweep setting as it should read in a sentence.
+
+    A night written before `bulk_ebay.py` recorded a sweep block carries
+    nothing for the field, and "unrecorded" is the honest word for that.
+    "None" would read as a value the sweep actually held.
+    """
+    return "unrecorded" if value is None else repr(value)
+
+
 def compare(a: Footprint, b: Footprint) -> Comparability:
     """Can these two nights be differenced as change over time?
 
-    Four things break comparability, and each produces its own sentence:
+    Five things break comparability, and each produces its own sentence:
 
     1. either night left no checkpoint -- nothing is known about what it swept;
     2. either checkpoint carried a key this module does not recognise -- the
        footprint is incomplete and a silent "comparable" would be worse than
        an admitted unknown;
     3. the set of leaves moved;
-    4. the depth into a shared leaf moved.
+    4. the depth into a shared leaf moved;
+    5. the recorded sweep shape moved -- the results view above all, which
+       changes what a page returns without touching a single shard key.
 
     A leaf whose depth changed because it simply ran out of results is
     indistinguishable here from one whose cap was raised, and this reports
@@ -227,6 +267,7 @@ def compare(a: Footprint, b: Footprint) -> Comparability:
         return Comparability(
             date_a=a.day, date_b=b.day, comparable=False,
             leaves_added=(), leaves_removed=(), depth_changed={},
+            sweep_changed={},
             note=(f"No sweep checkpoint exists for {' and '.join(missing)}. "
                   "The board cannot say whether both nights swept the same "
                   "population, so it does not present this difference as "
@@ -237,10 +278,33 @@ def compare(a: Footprint, b: Footprint) -> Comparability:
         return Comparability(
             date_a=a.day, date_b=b.day, comparable=False,
             leaves_added=(), leaves_removed=(), depth_changed={},
+            sweep_changed={},
             note=("A sweep checkpoint carried a shard key this board does not "
                   "recognise, so the footprint it recovered is incomplete. "
                   "Read bulk_ebay.py's key shape before trusting this "
                   "difference."),
+        )
+
+    # Ahead of the leaf and depth comparisons on purpose. A sweep run in a
+    # different view is not "the same leaves plus a bit of drift" -- every row
+    # on every shared leaf came off a different card -- so it deserves its own
+    # sentence rather than being folded into a depth report.
+    keys = sorted(set(a.sweep) | set(b.sweep))
+    sweep_changed = {k: (a.sweep.get(k), b.sweep.get(k))
+                     for k in keys if a.sweep.get(k) != b.sweep.get(k)}
+    if sweep_changed:
+        moved = ", ".join(
+            f"{k} {_shape(old)} -> {_shape(new)}"
+            for k, (old, new) in sorted(sweep_changed.items()))
+        return Comparability(
+            date_a=a.day, date_b=b.day, comparable=False,
+            leaves_added=(), leaves_removed=(), depth_changed={},
+            sweep_changed=sweep_changed,
+            note=(f"The two nights swept under different settings: {moved}. "
+                  "A setting that changes what a page returns changes the "
+                  "population without changing a single shard key, so this "
+                  "board does not present the difference as change over "
+                  "time."),
         )
 
     leaves_a, leaves_b = set(a.pages), set(b.pages)
@@ -255,7 +319,8 @@ def compare(a: Footprint, b: Footprint) -> Comparability:
     if not added and not removed and not depth_changed:
         return Comparability(
             date_a=a.day, date_b=b.day, comparable=True,
-            leaves_added=(), leaves_removed=(), depth_changed={}, note="",
+            leaves_added=(), leaves_removed=(), depth_changed={},
+            sweep_changed={}, note="",
         )
 
     parts: list[str] = []
@@ -273,6 +338,7 @@ def compare(a: Footprint, b: Footprint) -> Comparability:
     return Comparability(
         date_a=a.day, date_b=b.day, comparable=False,
         leaves_added=added, leaves_removed=removed, depth_changed=depth_changed,
+        sweep_changed={},
         note=(f"The two nights did not sweep the same population. "
               f"{'. '.join(p[0].upper() + p[1:] for p in parts)}. "
               "A count that moves between them measures the sweep as well as "

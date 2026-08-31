@@ -10,6 +10,13 @@ sweep would have recorded it as done=0 ("swept, genuinely nothing there")
 and the board would have stayed empty with every test green. Adding
 `_fsrp=1` kept both 26677 and 9394 on a 256-row results page, page 2
 included, with the price band applied.
+
+Measured 2026-08-31, the same way: eBay picks the results VIEW per category,
+and the gallery card carries no seller line. Leaf 246 returned 169 rows with
+a seller on 4.7% of them under the sweep's URL, and 255 rows with a seller on
+97.3% under `&_dmd=1`. Pet Supplies leaf 20742 -- already list by default,
+96.9% -- dropped to 3.1% when forced to `&_dmd=2`, which is what makes the
+view the cause rather than something about toys.
 """
 from phoneloop.ebay import search_key, search_url
 
@@ -28,10 +35,36 @@ def test_keyword_search_shape_unchanged():
     assert "_pgn=2" in url
 
 
-def test_search_key_is_independent_of_the_url_fix():
-    # Recordings are named by this key; changing the URL must not rename
-    # them, or every recording captured today would go missing again.
-    assert search_key("sacat", "26677", 15, 55, 1) == "sacat:26677:15-55:p1"
+def test_the_view_is_pinned_on_every_search():
+    """Not "toys_games gets list view" -- every search does.
+
+    Leaving it to eBay is what let one department go dark for four nights
+    while every sibling read 97%. A per-category default that can change
+    under the sweep is the failure, and naming the view on every request is
+    the fix.
+    """
+    for url in (search_url("sacat", "26677", 15, 55, 1),
+                search_url("nkw", "car phone holder", 15, 55, 2)):
+        assert "_dmd=1" in url
+
+
+def test_the_key_names_what_changes_the_page():
+    """The key renames recordings, so it moves only when it must.
+
+    `_fsrp=1` changed how the page is REACHED -- same leaf, same band, same
+    page, same results once you get there -- so it did not belong in the key,
+    and this test used to assert exactly that.
+
+    `_dmd` changes what comes BACK. The same leaf, band and page returns a
+    gallery card with no seller line or a list card with one, and every
+    recording in the cassette before 2026-08-31 is a gallery-era page. Left
+    out of the key, replay would serve one under a key that now promises the
+    other -- a silently wrong page rather than a missing one, which is the
+    single failure mode the harness exists to prevent. In the key, those
+    recordings stop matching and replay raises.
+    """
+    assert search_key("sacat", "26677", 15, 55, 1) == "sacat:26677:15-55:p1:list"
+    assert search_key("sacat", "26677", 15, 55, 1) != "sacat:26677:15-55:p1"
 
 
 def test_browse_node_redirect_is_detected():

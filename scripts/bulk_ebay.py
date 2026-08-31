@@ -109,6 +109,7 @@ from phoneloop.ebay import (  # noqa: E402
     niche_key, parse_rows, search_key, search_url, shard_for,
     to_row, uk_share,
 )
+from phoneloop.ebay import VIEW as ebay_view  # noqa: E402
 from phoneloop.harness import Cassette, recorded  # noqa: E402
 from phoneloop.market_store import MarketStore  # noqa: E402
 
@@ -536,6 +537,27 @@ def main() -> int:
               f"{len(checkpoint.get('blocked', {}))} previously blocked")
     done = checkpoint.setdefault("done", {})
     blocked_log = checkpoint.setdefault("blocked", {})
+
+    # The shape of tonight's sweep, recorded beside what it swept.
+    #
+    # `done`'s keys carry the leaf, the band and the page, so a change to any
+    # of those three is already visible to phoneloop.footprint. The results
+    # VIEW is not in them, and it changes what a page returns: the same leaf,
+    # band and page came back with a seller line on 97.3% of rows in list
+    # view and 3.1% in gallery (phoneloop/ebay.py's _dmd note). A night swept
+    # under a different view is a different population under identical shard
+    # keys, and without this block the guard would certify that pair as
+    # comparable.
+    #
+    # `pages_per_shard` is what was ASKED for, and is recorded next to the
+    # per-leaf depths that say what happened. A leaf that ran out of results
+    # at page 2 under a setting of 10 is a very different night from the same
+    # depth under a setting of 3, and only this field tells them apart.
+    checkpoint["sweep"] = {
+        "view": ebay_view,
+        "pages_per_shard": args.pages_per_shard,
+        "price_band": f"{args.price_from}-{args.price_to}",
+    }
 
     # (mode, term, category_slug, leaf_category_id, price_lo, price_hi)
     targets: list[tuple[str, str, str, str | None, int, int]] = []

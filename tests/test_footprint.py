@@ -249,3 +249,134 @@ def test_the_production_checkpoint_parses_if_it_is_here():
         "bulk_ebay.py writes a shard key phoneloop.footprint does not "
         "recognise, so every footprint it recovers is incomplete")
     assert f.n_leaves > 0
+
+
+# --- the sweep shape, which no shard key carries -----------------------------
+
+SWEEP_LIST = {"view": "list", "pages_per_shard": 3, "price_band": "15-55"}
+SWEEP_GALLERY = {"view": "gallery", "pages_per_shard": 3, "price_band": "15-55"}
+
+
+def test_the_sweep_block_is_read_off_the_checkpoint():
+    payload = {**checkpoint({"246": 1}), "sweep": SWEEP_LIST}
+    f = fp.parse_checkpoint(payload, DAY_A)
+
+    assert f.view == "list"
+    assert f.sweep == SWEEP_LIST
+    assert f.as_dict()["sweep"] == SWEEP_LIST
+
+
+def test_a_night_with_no_sweep_block_reports_an_unknown_shape():
+    """Every checkpoint written before 2026-08-31 is one of these. "Unknown"
+    is the honest reading -- never "matched"."""
+    f = fp.parse_checkpoint(checkpoint({"246": 1}), DAY_A)
+
+    assert f.sweep == {}
+    assert f.view is None
+
+
+def test_a_view_change_breaks_comparability_with_identical_shard_keys(tmp_path):
+    """THE trap this check exists for.
+
+    Gallery and list return the same leaves, the same band and the same
+    pages, so `done` is byte-identical between the two nights. What differs
+    is every row on every one of them: measured 2026-08-31, one leaf carried
+    a seller line on 97.3% of rows in list view and 3.1% in gallery. Nothing
+    in a shard key can see that.
+    """
+    write(tmp_path, DAY_A, {**checkpoint({"246": 3}), "sweep": SWEEP_GALLERY})
+    write(tmp_path, DAY_B, {**checkpoint({"246": 3}), "sweep": SWEEP_LIST})
+
+    a, b = fp.read_footprint(tmp_path, DAY_A), fp.read_footprint(tmp_path, DAY_B)
+    assert a.pages == b.pages, "the shard keys must be identical for this test to mean anything"
+
+    c = fp.compare(a, b)
+
+    assert c.comparable is False
+    assert c.sweep_changed == {"view": ("gallery", "list")}
+    assert "view 'gallery' -> 'list'" in c.note
+    assert "does not present the difference as change over time" in c.note
+
+
+def test_two_nights_in_the_same_view_still_compare(tmp_path):
+    write(tmp_path, DAY_A, {**checkpoint({"246": 3}), "sweep": SWEEP_LIST})
+    write(tmp_path, DAY_B, {**checkpoint({"246": 3}), "sweep": SWEEP_LIST})
+
+    c = fp.compare(fp.read_footprint(tmp_path, DAY_A),
+                   fp.read_footprint(tmp_path, DAY_B))
+
+    assert c.comparable is True
+    assert c.sweep_changed == {}
+
+
+def test_an_unrecorded_shape_does_not_match_a_recorded_one(tmp_path):
+    """The first night after the sweep block ships. Both nights swept the
+    same leaves to the same depth, and the older one cannot say in what
+    view -- so the pair is not certifiable, and the note says "unrecorded"
+    rather than naming a value that night never held."""
+    write(tmp_path, DAY_A, checkpoint({"246": 3}))
+    write(tmp_path, DAY_B, {**checkpoint({"246": 3}), "sweep": SWEEP_LIST})
+
+    c = fp.compare(fp.read_footprint(tmp_path, DAY_A),
+                   fp.read_footprint(tmp_path, DAY_B))
+
+    assert c.comparable is False
+    assert c.sweep_changed["view"] == (None, "list")
+    assert "view unrecorded -> 'list'" in c.note
+
+
+def test_two_nights_that_both_predate_the_sweep_block_still_compare(tmp_path):
+    """The three snapshots already in the production store. Neither knows
+    its shape, and nothing distinguishes them, so an unknown against the
+    same unknown must not manufacture a difference."""
+    write(tmp_path, DAY_A, checkpoint({"246": 3}))
+    write(tmp_path, DAY_B, checkpoint({"246": 3}))
+
+    c = fp.compare(fp.read_footprint(tmp_path, DAY_A),
+                   fp.read_footprint(tmp_path, DAY_B))
+
+    assert c.comparable is True
+
+
+def test_raising_pages_per_shard_is_caught_even_when_no_depth_moved(tmp_path):
+    """A leaf with two pages of results records depth 2 whether the cap is 3
+    or 30. Without the configured setting beside the depths, the night the
+    cap was raised looks identical to the night before it on every leaf that
+    was already exhausted -- and nothing like it on the leaves that were
+    not."""
+    write(tmp_path, DAY_A, {**checkpoint({"246": 2}), "sweep": SWEEP_LIST})
+    write(tmp_path, DAY_B, {**checkpoint({"246": 2}),
+                            "sweep": {**SWEEP_LIST, "pages_per_shard": 30}})
+
+    a, b = fp.read_footprint(tmp_path, DAY_A), fp.read_footprint(tmp_path, DAY_B)
+    assert a.pages == b.pages
+
+    c = fp.compare(a, b)
+
+    assert c.comparable is False
+    assert c.sweep_changed == {"pages_per_shard": (3, 30)}
+
+
+def test_the_sweep_change_is_reported_before_the_leaf_change(tmp_path):
+    """A night swept in a different view is not the same leaves plus drift.
+    Every row on every shared leaf came off a different card, so that is the
+    sentence the board must print, not a leaf count."""
+    write(tmp_path, DAY_A, {**checkpoint({"246": 3}), "sweep": SWEEP_GALLERY})
+    write(tmp_path, DAY_B, {**checkpoint({"246": 3, "222": 3}), "sweep": SWEEP_LIST})
+
+    c = fp.compare(fp.read_footprint(tmp_path, DAY_A),
+                   fp.read_footprint(tmp_path, DAY_B))
+
+    assert c.comparable is False
+    assert "view" in c.note
+    assert "entered the sweep" not in c.note
+
+
+def test_sweep_changed_is_json_serialisable(tmp_path):
+    write(tmp_path, DAY_A, {**checkpoint({"246": 3}), "sweep": SWEEP_GALLERY})
+    write(tmp_path, DAY_B, {**checkpoint({"246": 3}), "sweep": SWEEP_LIST})
+    c = fp.compare(fp.read_footprint(tmp_path, DAY_A),
+                   fp.read_footprint(tmp_path, DAY_B))
+
+    assert json.loads(json.dumps(c.as_dict()))["sweep_changed"] == {
+        "view": ["gallery", "list"]}

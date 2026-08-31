@@ -44,6 +44,8 @@ from phoneloop import catalog_ebay, config, ebay, identity
 from phoneloop.board import BoardRow, group_products_in_leaf, rank_niches
 from phoneloop.knobs import Knobs
 from phoneloop.market_store import ROW_FIELDS, MarketStore
+from phoneloop.footprint import (Comparability, compare,
+                                read_footprint)
 from phoneloop.snapshots import Difference, difference
 
 # How many niches rank_niches is asked for. The in-scope catalogue holds 43
@@ -155,6 +157,12 @@ class Build:
     niches: list[BoardRow]
     groups: dict[str, tuple[dict, dict]]
     diff: Difference | None
+    #: Whether the two differenced nights swept the same population. None
+    #: when there is no difference to qualify. A difference across two unlike
+    #: footprints is not wrong to compute -- it is wrong to read as change
+    #: over time, and every consumer of `diff` has to say so. See
+    #: phoneloop/footprint.py.
+    comparability: Comparability | None = None
     # Memo for the handful of results two panels genuinely share. Every
     # `store.sql()` call opens a connection and rebuilds the parquet view, so
     # a query run twice costs about as much as a whole extra panel; two
@@ -207,6 +215,13 @@ def build(data_dir: Path | str, knobs: Knobs) -> Build:
     in_scope = set(catalog_ebay.top_level_of().keys())
 
     diff = difference(store, dates[-2], dates[-1]) if len(dates) >= 2 else None
+    # Read off each night's own checkpoint, not off run_daily.cmd. The config
+    # says what was asked for; the checkpoint says what happened, including
+    # the shards eBay blocked, and those are exactly the nights that differ.
+    comparability = (
+        compare(read_footprint(data_dir, dates[-2]),
+                read_footprint(data_dir, dates[-1]))
+        if len(dates) >= 2 else None)
 
     niches = [r for r in rank_niches(store, knobs, difference=diff,
                                      limit=_NICHE_LIMIT)
@@ -225,7 +240,8 @@ def build(data_dir: Path | str, knobs: Knobs) -> Build:
 
     return Build(store=store, data_dir=data_dir, knobs=knobs, dates=dates,
                  day=day, rows=rows, extra=extra, in_scope=in_scope,
-                 niches=niches, groups=groups, diff=diff)
+                 niches=niches, groups=groups, diff=diff,
+                 comparability=comparability)
 
 
 # --- shared helpers ----------------------------------------------------------

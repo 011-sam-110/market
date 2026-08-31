@@ -65,8 +65,36 @@ from phoneloop.parser import parse as _parse_model
 DEFAULT_PRICE_FROM = 15    # pounds -- the spec's default retail band (design spec §3, knob 3)
 DEFAULT_PRICE_TO = 55
 
+# eBay picks the results VIEW per category, and the gallery card carries no
+# seller line at all. Measured live 2026-08-31, one page each, leaf 246 (Toys
+# & Games) against leaf 20742 (Pet Supplies) as the control:
+#
+#     leaf 246    default          169 rows, seller on   4.7%
+#     leaf 246    &_dmd=1  list    255 rows, seller on  97.3%
+#     leaf 246    &_dmd=2  gallery 255 rows, seller on   3.1%
+#     leaf 20742  default          256 rows, seller on  96.9%
+#     leaf 20742  &_dmd=1  list    256 rows, seller on  96.9%
+#     leaf 20742  &_dmd=2  gallery 256 rows, seller on   3.1%
+#
+# All five toys_games leaves sat at 1.6-2.1% seller coverage across three
+# recorded pages each, while all eight sibling departments sat at 96.6-97.9%
+# on the same night through the same code. Toys & Games defaults to gallery.
+# Forcing a healthy department into gallery reproduces the outage exactly,
+# which is what makes this a cause rather than a correlation.
+#
+# Two things were wrong, not one: the gallery card dropped the seller line
+# AND the default page returned 169 rows where list view returned 255.
+#
+# `_dmd=1` pins list view for EVERY category, so the department eBay decides
+# to render as a gallery next month cannot go dark the same silent way. The
+# view is part of `search_key` for the same reason -- a page captured in
+# gallery view is a different page, and replaying one as the other is the
+# exact lie the harness exists to prevent.
+VIEW = "list"
+_DMD_LIST = "&_dmd=1"
+
 _SEARCH_URL_NKW = ("https://www.ebay.co.uk/sch/i.html?_nkw={term}&_ipg=240&_pgn={page}"
-                    "&_udlo={lo}&_udhi={hi}")
+                    "&_udlo={lo}&_udhi={hi}" + _DMD_LIST)
 # _fsrp=1 is load-bearing on the category-only shape. Without it eBay
 # redirects the request to the /b/bn_<n> browse node of that category --
 # every variant measured 2026-08-28 did (plain, rt=nc, empty _nkw, _sop=12,
@@ -77,7 +105,7 @@ _SEARCH_URL_NKW = ("https://www.ebay.co.uk/sch/i.html?_nkw={term}&_ipg=240&_pgn=
 # Keyword (_nkw=) searches never redirect. `is_browse_redirect` below is
 # the guard for the day this stops being enough.
 _SEARCH_URL_SACAT = ("https://www.ebay.co.uk/sch/i.html?_sacat={term}&_fsrp=1&_ipg=240"
-                      "&_pgn={page}&_udlo={lo}&_udhi={hi}")
+                      "&_pgn={page}&_udlo={lo}&_udhi={hi}" + _DMD_LIST)
 
 
 def search_key(mode: str, term: str, lo: int, hi: int, pgn: int) -> str:
@@ -85,8 +113,20 @@ def search_key(mode: str, term: str, lo: int, hi: int, pgn: int) -> str:
     name, produce)` for the same (mode, term, price band, page) -- identical
     wording so a page scripts/record_ebay.py captures replays under
     scripts/bulk_ebay.py, and vice versa. `mode` is "nkw" (keyword) or
-    "sacat" (numeric leaf category id)."""
-    return f"{mode}:{term}:{lo}-{hi}:p{pgn}"
+    "sacat" (numeric leaf category id).
+
+    The trailing view token is load-bearing. Until 2026-08-31 the key named
+    only (mode, term, band, page), on the reasoning that the key names the
+    QUERY and the URL is free to change. That held while the URL fixes were
+    about reaching the page at all (`_fsrp=1`). It stops holding for `_dmd`,
+    which changes what comes back: the same leaf, band and page returns a
+    gallery card with no seller line or a list card with one. Every
+    recording in the cassette before this date is a gallery-era page, and
+    without the token replay would serve one under a key that now promises
+    the other. With it, those recordings simply stop matching and the
+    harness raises MissingRecording, which is the honest outcome.
+    """
+    return f"{mode}:{term}:{lo}-{hi}:p{pgn}:{VIEW}"
 
 
 def search_url(mode: str, term: str, lo: int, hi: int, pgn: int) -> str:
