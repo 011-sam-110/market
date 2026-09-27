@@ -91,3 +91,28 @@ class TestItSurvivesOntoTheRow:
         extra = self._extra(BOUNDED)
         for key in ("aspects", "watchers", "ships_from", "stock_hint"):
             assert key in extra, f"{key} was dropped from extra"
+
+
+class TestACommaIsNotACount:
+    """`([\d,]+)` also matched a LONE comma, so a row whose text said
+    ", sold" anywhere -- "Brand new, sold as seen" -- captured "," and
+    `int("")` raised. The raise killed the whole sweep mid-run: the Windows
+    nightlies of 13, 14, 15 and 18 Sep 2026 and the first provenance-1 night
+    (27 Sep, after 22 good pages) all died on this one traceback."""
+
+    TITLE_COMMA = ("Bedding Set Double Brand new, sold as seen\n"
+                   "Opens in a new window or tab\nBrand new\n£19.99\n"
+                   "Buy It Now\nFree postage\nseller99 99.8% positive (10.7K)")
+
+    def test_a_comma_before_sold_does_not_raise(self):
+        assert parse_row(self.TITLE_COMMA, URL).sold_qty is None
+
+    def test_a_number_then_a_comma_is_not_a_count(self):
+        """"Pack of 2, sold as seen" is a title, not two sales."""
+        text = self.TITLE_COMMA.replace("Brand new, sold", "Pack of 2, sold")
+        assert parse_row(text, URL).sold_qty is None
+
+    def test_real_counts_still_parse(self):
+        for shown, qty in (("616 sold", 616), ("7,000+ sold", 7000),
+                           ("12345 sold", 12345), ("1,234,567 sold", 1234567)):
+            assert parse_row(EXACT.replace("616 sold", shown), URL).sold_qty == qty, shown

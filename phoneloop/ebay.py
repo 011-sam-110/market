@@ -243,7 +243,13 @@ def is_decoy(url: str) -> bool:
 # carried onto the row as `sold_bound`, letting the differencing layer refuse
 # a subtraction it cannot justify. The digits still travel either way; only
 # the subtraction is refused.
-_SOLD_RE = re.compile(r"([\d,]+)(\+)?\s*sold\b", re.I)
+#
+# The count is digits with thousands groups ("7,000", "1,234,567") or plain
+# digits ("12345"), never `[\d,]+`: that also matched a LONE comma, so any
+# row saying ", sold" ("Brand new, sold as seen") captured "," and int("")
+# killed the whole sweep mid-run (13-18 Sep 2026, and 27 Sep). "2, sold as
+# seen" is a title too, not two sales, and strict grouping refuses it.
+_SOLD_RE = re.compile(r"(\d{1,3}(?:,\d{3})+|\d+)(\+)?\s*sold\b", re.I)
 
 # eBay's own stock-pressure copy. Recorded verbatim rather than folded into a
 # quantity -- "Almost gone" is not a number, and turning it into one would be
