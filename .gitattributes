@@ -6,3 +6,8 @@ dashboard/test/fixtures/knob-golden.json -text
 # Run by bash and systemd on provenance-1. A CR at a line end breaks both.
 *.sh text eol=lf
 deploy/systemd/* text eol=lf
+
+# Reports written on the Windows host carry CRLF, and the repo keeps LF.
+# publish_web.py re-copies every day each night, so without this an old
+# report would read as changed on every run.
+web/**/*.html text eol=lf
