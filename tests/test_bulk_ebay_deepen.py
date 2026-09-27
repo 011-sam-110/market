@@ -172,3 +172,62 @@ class TestTheCircuitBreaker:
         assert calls["n"] == (cap - 1) + 1 + cap
         assert "STOPPED EARLY" in out
         assert "deepened 1/200" in out
+
+
+class TestTheTimeBudget:
+    """Deepen runs before the board and the publish step. A deepen that
+    outlives the night takes both with it -- which is what the Windows
+    task's 3h kill did on most nights after 2026-09-08."""
+
+    _stub = TestTheCircuitBreaker._stub
+    _store = TestTheCircuitBreaker._store
+
+    @staticmethod
+    def _clock(step_s):
+        """A clock that moves step_s seconds every time it is read."""
+        t = {"now": 0.0}
+
+        def read():
+            t["now"] += step_s
+            return t["now"]
+        return read
+
+    def _ok(self, calls):
+        def fetch(_page, url):
+            calls["n"] += 1
+            return {"text": f"item {url}", "html": "", "url": url}
+        return fetch
+
+    def test_the_budget_stops_the_run_cleanly(self, tmp_path, monkeypatch, capsys):
+        calls = {"n": 0}
+        self._stub(monkeypatch, self._ok(calls))
+        store = self._store(tmp_path, 50)
+        # Deadline is set at t=60 to 60+300=360; each loop check moves the
+        # clock 60 s, so checks read 120..360 and the fifth one stops it.
+        code = bulk_ebay.run_deepen(
+            store, bulk_ebay.Cassette(tmp_path / "fixtures"),
+            offline=True, limit=50, headless=True, direct=True,
+            max_seconds=300, clock=self._clock(60))
+        out = capsys.readouterr().out
+
+        assert calls["n"] == 4
+        assert "STOPPED EARLY: the 5-minute deepen budget ran out" in out
+        assert "deepened 4/50" in out
+        assert "46 never attempted" in out
+        assert code == 0, (
+            "a spent budget must not abort the nightly chain -- the board "
+            "and the publish step are the reason the budget exists")
+
+    def test_no_budget_means_no_limit(self, tmp_path, monkeypatch, capsys):
+        """0 is the default, and must keep the old behaviour exactly."""
+        calls = {"n": 0}
+        self._stub(monkeypatch, self._ok(calls))
+        store = self._store(tmp_path, 30)
+        bulk_ebay.run_deepen(
+            store, bulk_ebay.Cassette(tmp_path / "fixtures"),
+            offline=True, limit=30, headless=True, direct=True,
+            clock=self._clock(10_000))
+        out = capsys.readouterr().out
+
+        assert calls["n"] == 30
+        assert "STOPPED EARLY" not in out

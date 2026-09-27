@@ -95,6 +95,7 @@ import contextlib
 import json
 import sys
 import time
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -354,7 +355,9 @@ def rows_to_deepen(store: MarketStore, *, limit: int) -> list[dict]:
 
 
 def run_deepen(store: MarketStore, cassette: Cassette, *, offline: bool,
-               limit: int, headless: bool, direct: bool) -> int:
+               limit: int, headless: bool, direct: bool,
+               max_seconds: float = 0,
+               clock: Callable[[], float] = time.monotonic) -> int:
     """Tier 2 (design spec section 4): enrich a bounded batch of already-swept
     eBay listings with what only the item page carries -- `seller_type`,
     `listed_at`, brand/MPN/EAN, the real lifetime sold count -- none of
@@ -412,6 +415,13 @@ def run_deepen(store: MarketStore, cassette: Cassette, *, offline: bool,
     # streak of 25 is not bad luck.
     consecutive_failures = 0
     stopped_early = ""
+    # A wall-clock budget, for the same reason as the breaker: deepen runs
+    # BEFORE the board, the reports and the publish step. On Windows the
+    # task's 3h ExecutionTimeLimit killed the whole chain in the middle of a
+    # 5,000-item deepen on most nights after 2026-09-08, so no report was
+    # written or published although every sweep had landed. A budget ends
+    # deepen cleanly and leaves the rest of the night to run. 0 = no budget.
+    deadline = clock() + max_seconds if max_seconds > 0 else None
     with contextlib.ExitStack() as stack:
         page = None
         if not offline:
@@ -424,6 +434,12 @@ def run_deepen(store: MarketStore, cassette: Cassette, *, offline: bool,
 
         attempted = 0
         for row in candidates:
+            if deadline is not None and clock() >= deadline:
+                stopped_early = (
+                    f"the {max_seconds / 60:.0f}-minute deepen budget ran out. "
+                    "Stopped so that the board, the reports and the publish "
+                    "step still run tonight.")
+                break
             attempted += 1
             url = row["url"]
             try:
@@ -549,6 +565,9 @@ def main() -> int:
                          "item pages, instead of sweeping (see run_deepen)")
     ap.add_argument("--deepen-limit", type=int, default=200,
                     help="max listings to deepen per run, --deepen only")
+    ap.add_argument("--deepen-max-minutes", type=float, default=0,
+                    help="wall-clock budget for --deepen; stops cleanly (exit "
+                         "0) when it runs out. 0 = no budget")
     args = ap.parse_args()
 
     if not args.category and not args.leaf_sweep and not args.deepen:
@@ -565,7 +584,8 @@ def main() -> int:
                  f"under {cassette.root}" if offline else ""))
         return run_deepen(store, cassette, offline=offline,
                           limit=args.deepen_limit, headless=args.headless,
-                          direct=args.direct)
+                          direct=args.direct,
+                          max_seconds=args.deepen_max_minutes * 60)
 
     cp_path = args.checkpoint or default_checkpoint_path(cfg.DATA_DIR)
     checkpoint: dict = {}
