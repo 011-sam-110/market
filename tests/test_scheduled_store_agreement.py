@@ -95,6 +95,27 @@ class TestTheWrapperPinsTheStore:
                          re.IGNORECASE)
 
 
+class TestTheLinuxHostPinsTheSameStore:
+    """The same split-brain, on provenance-1: the systemd unit hands
+    nightly.py its store, and run_daily.sh defaults the sweep's. They must
+    name one store, and the unit's value must win."""
+
+    UNIT = REPO / "deploy" / "systemd" / "phoneloop-nightly.service"
+
+    def test_the_unit_and_run_daily_sh_name_the_same_store(self):
+        unit = re.search(r"^Environment=PHONELOOP_DATA_DIR=(\S+)$",
+                         self.UNIT.read_text(encoding="utf-8"), re.MULTILINE)
+        sh = re.search(r'PHONELOOP_DATA_DIR="\$\{PHONELOOP_DATA_DIR:-([^}"]+)\}"',
+                       (SCRIPTS / "run_daily.sh").read_text(encoding="utf-8"))
+        assert unit and sh, "one of the two no longer declares a store"
+        # %h (systemd) and $HOME (bash) are the same directory.
+        assert unit.group(1).replace("%h", "$HOME") == sh.group(1)
+
+    def test_run_daily_sh_yields_to_the_units_value(self):
+        text = (SCRIPTS / "run_daily.sh").read_text(encoding="utf-8")
+        assert "${PHONELOOP_DATA_DIR:-" in text
+
+
 class TestTheWatcherAgreesWithTheSweep:
     def test_nightly_dry_run_reports_the_wrapper_store(self, tmp_path):
         """End to end, in the environment the task actually provides.

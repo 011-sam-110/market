@@ -336,13 +336,18 @@ class TestTheRealRunner:
 
 
 class TestLauncherDiscipline:
-    def test_default_command_is_the_pinned_cmd_not_a_bare_python(self):
-        """nightly.py launches run_daily.cmd, which pins the interpreter
-        itself. Nothing here may reach for `python` on PATH -- that resolves
-        to the MSIX stub, which exits silently with no console."""
-        cmd = nightly.default_command()
-        assert [c for c in cmd if c.lower() in ("python", "py", "python.exe")] == []
-        assert cmd[-1].lower().endswith("run_daily.cmd")
+    @pytest.mark.parametrize("platform, child", [("nt", "run_daily.cmd"),
+                                                 ("posix", "run_daily.sh")])
+    def test_default_command_is_the_pinned_script_not_a_bare_python(
+            self, platform, child):
+        """nightly.py launches run_daily.cmd (Windows) or run_daily.sh
+        (Linux), and each pins the interpreter itself. Nothing here may
+        reach for `python` on PATH -- on Windows that resolves to the MSIX
+        stub, which exits silently with no console."""
+        cmd = nightly.default_command(platform=platform)
+        assert [c for c in cmd if c.lower() in ("python", "python3", "py",
+                                                "python.exe")] == []
+        assert cmd[-1].lower().endswith(child)
 
     def test_any_python_it_ever_launches_is_sys_executable(self):
         """Structural, not conventional: the .cmd launched nightly.py with
