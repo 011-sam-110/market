@@ -13,6 +13,10 @@ Type=oneshot
 WorkingDirectory=%h/market
 Environment=PHONELOOP_DATA_DIR=%h/.phoneloop/prod
 Environment=PYTHONUNBUFFERED=1
+# Always the virtual display (run_daily.sh wraps the browser steps in
+# xvfb-run when DISPLAY is unset). A desktop session can export its DISPLAY
+# into the user manager, and the sweep's Chrome must not open on the seat.
+UnsetEnvironment=DISPLAY WAYLAND_DISPLAY
 ExecStart=%h/market/.venv/bin/python %h/market/scripts/nightly.py
 # 75 is nightly.py's EX_TEMPFAIL: another run holds the lock. A backed-off
 # run is not a failed one.
