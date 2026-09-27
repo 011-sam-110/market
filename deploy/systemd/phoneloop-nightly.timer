@@ -1,0 +1,11 @@
+[Unit]
+Description=eBay niche finder nightly at 03:00
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+# Catch up after the box was off at 03:00 (the Windows task's AtLogOn
+# trigger did the same job).
+Persistent=true
+
+[Install]
+WantedBy=timers.target

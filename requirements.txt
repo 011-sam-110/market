@@ -6,3 +6,7 @@ duckdb>=1.0
 pytz>=2024.1
 pyarrow>=15.0
 pytest>=8.0
+# The sweep and deepen drive a real Chrome (phoneloop/browser.py). It was
+# only ever installed by hand on the Windows box, so a fresh host had no way
+# to know it needed it.
+playwright>=1.47

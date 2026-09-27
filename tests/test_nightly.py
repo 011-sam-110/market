@@ -14,6 +14,7 @@ so a backed-off run does not read as a failure), 2 internal.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -84,11 +85,29 @@ class TestHappyPath:
         nightly.run_nightly(data_dir=tmp_path, now=late, runner=FakeRunner(0))
         assert _read_run(tmp_path)["run_date"] == "2026-08-28"
 
-    def test_launches_run_daily_cmd_as_one_child(self, tmp_path):
+    def test_launches_run_daily_as_one_child(self, tmp_path):
         runner = FakeRunner(0, GREEN_OUTPUT)
         nightly.run_nightly(data_dir=tmp_path, now=NOW, runner=runner)
         assert len(runner.calls) == 1
-        assert runner.calls[0][-1].lower().endswith("run_daily.cmd")
+        assert runner.calls[0][-1].lower().endswith(
+            "run_daily.cmd" if os.name == "nt" else "run_daily.sh")
+
+    def test_windows_launches_the_cmd_and_linux_the_sh(self):
+        """Both hosts are real: the night ran on Windows until 2026-09-27
+        and on provenance-1 (Fedora) after it."""
+        win = nightly.default_command("/repo", platform="nt")
+        posix = nightly.default_command("/repo", platform="posix")
+        assert win[:2] == ["cmd.exe", "/c"]
+        assert win[-1].endswith("run_daily.cmd")
+        assert posix[0] == "bash"
+        assert posix[-1].endswith("run_daily.sh")
+
+    def test_the_sh_child_exists_beside_the_cmd(self):
+        """A default that names a file nobody committed fails at 03:00,
+        not in review."""
+        scripts = Path(nightly.__file__).resolve().parent
+        assert (scripts / "run_daily.cmd").is_file()
+        assert (scripts / "run_daily.sh").is_file()
 
     def test_the_heartbeat_says_running_before_the_child_starts(self, tmp_path):
         """A hard kill skips every `finally`. The record written BEFORE the

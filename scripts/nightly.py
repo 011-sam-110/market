@@ -74,14 +74,19 @@ _STEP_RE = re.compile(r"\[run_daily\].*?--\s*\[\d+/\d+\]\s*(?P<name>[A-Z]+)")
 _FAIL_RE = re.compile(r"\[run_daily\]\s+(?P<name>[A-Z]+)\s+failed")
 
 
-def default_command(repo_root: Path | str | None = None) -> list[str]:
-    """The child to launch: run_daily.cmd, via cmd.exe so a .cmd is
-    executable on any Python/OS combination that can reach it.
+def default_command(repo_root: Path | str | None = None,
+                    platform: str = os.name) -> list[str]:
+    """The child to launch: run_daily.cmd via cmd.exe on Windows, and
+    run_daily.sh via bash everywhere else (the provenance-1 host since
+    2026-09-27). The two files run the same steps in the same order.
 
-    No element of this is an interpreter name -- see the module docstring.
+    No element of this is a Python interpreter name -- see the module
+    docstring.
     """
     root = Path(repo_root) if repo_root else _REPO_ROOT
-    return ["cmd.exe", "/c", str(root / "scripts" / "run_daily.cmd")]
+    if platform == "nt":
+        return ["cmd.exe", "/c", str(root / "scripts" / "run_daily.cmd")]
+    return ["bash", str(root / "scripts" / "run_daily.sh")]
 
 
 def log_path_for(data_dir: Path | str, day: date) -> Path:

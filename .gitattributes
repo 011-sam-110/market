@@ -2,3 +2,7 @@
 # --check and replayed by the TypeScript suite. Line-ending translation would
 # make it look drifted on one machine and clean on another.
 dashboard/test/fixtures/knob-golden.json -text
+
+# Run by bash and systemd on provenance-1. A CR at a line end breaks both.
+*.sh text eol=lf
+deploy/systemd/* text eol=lf

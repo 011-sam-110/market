@@ -1,0 +1,25 @@
+# eBay niche finder -- one night: sweep, deepen, board, reports, publish.
+# Installed by deploy/install-systemd.sh as a USER unit on provenance-1.
+# Fired by phoneloop-nightly.timer; start by hand with
+#   systemctl --user start phoneloop-nightly.service
+# (the day-guard skips a second run on the same UTC day; add --force by
+# running scripts/nightly.py --force directly).
+
+[Unit]
+Description=eBay niche finder nightly (sweep -> reports -> push to Vercel)
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/market
+Environment=PHONELOOP_DATA_DIR=%h/.phoneloop/prod
+Environment=PYTHONUNBUFFERED=1
+ExecStart=%h/market/.venv/bin/python %h/market/scripts/nightly.py
+# 75 is nightly.py's EX_TEMPFAIL: another run holds the lock. A backed-off
+# run is not a failed one.
+SuccessExitStatus=75
+# A backstop against a hung browser, not a budget: deepen has its own
+# (--deepen-max-minutes in run_daily.sh), and a 3h limit is what killed the
+# chain before the board on Windows. systemd never starts this unit twice at
+# once, so a long night delays the next one instead of overlapping it.
+TimeoutStartSec=20h
+Nice=5
