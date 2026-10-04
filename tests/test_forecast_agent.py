@@ -306,6 +306,11 @@ def test_news_missing_store_is_named(tmp_path):
     assert got.status.startswith("no news evidence")
 
 
+def test_a_short_acronym_matches_only_a_whole_word():
+    assert ev._match_score(["us", "iran"], "iranian talks: use of force") == 1
+    assert ev._match_score(["us", "iran"], "us and iranian envoys meet") == 2
+
+
 def test_keywords_drop_market_words_and_keep_acronyms():
     assert ev.keywords("Will NATO x Russia military clash by October 31, 2026?") == \
         ["nato", "russia", "military", "clash"]

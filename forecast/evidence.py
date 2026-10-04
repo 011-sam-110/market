@@ -176,9 +176,16 @@ def reddit_evidence(query: str, *, binary: Path | None, db: Path | None,
 # --- NewsScraper headlines ---------------------------------------------------
 
 def _match_score(words: list[str], text: str) -> int:
+    """How many keywords the text holds.
+
+    A word of four letters or more matches as a prefix, so "iran" finds
+    "Iranian". A shorter word (an acronym such as "us") must match whole, or
+    "us" would find "use" and "usual".
+    """
     hits = 0
     for word in words:
-        if re.search(rf"\b{re.escape(word)}", text):
+        tail = r"\b" if len(word) <= 3 else ""
+        if re.search(rf"\b{re.escape(word)}{tail}", text):
             hits += 1
     return hits
 
