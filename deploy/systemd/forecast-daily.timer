@@ -1,0 +1,12 @@
+[Unit]
+Description=Paper forecaster daily at 12:40
+
+[Timer]
+# 12:40 local time. Far from the 03:00 market nightly, off the newsfeed
+# pipeline's :30 slot, and off DeepSeek's peak-rate hours (UTC 01-04 and
+# 06-10 on weekdays).
+OnCalendar=*-*-* 12:40:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
