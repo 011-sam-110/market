@@ -1,4 +1,4 @@
-/* The shell: load the bundle once, hold the knob setting, route six views.
+/* The shell: load the bundle once, hold the knob setting, route seven views.
  *
  * Loading state matters more here than on most boards. The bundle is 21 MB
  * raw and the operator often opens this on a phone on a train, so "nothing
@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon, type IconName } from "./components/Icon";
 import { RecordHead } from "./components/RecordHead";
 import { loadBundle, loadListings, loadProductMetrics } from "./lib/data";
+import { loadForecast, type ForecastPayload } from "./lib/forecast";
 import { VIEWS, VIEW_BLURBS, VIEW_TITLES, replaceParams, useRoute } from "./lib/router";
 import { useKnobs } from "./lib/useKnobs";
 import type { Bundle, ListingsPayload } from "./lib/types";
@@ -23,6 +24,7 @@ import { Niches } from "./views/Niches";
 import { Explore } from "./views/Explore";
 import { Coverage } from "./views/Coverage";
 import { Trends } from "./views/Trends";
+import { Forecast } from "./views/Forecast";
 
 const VIEW_COMPONENTS = {
   shortlist: Shortlist,
@@ -31,6 +33,7 @@ const VIEW_COMPONENTS = {
   explore: Explore,
   coverage: Coverage,
   trends: Trends,
+  forecast: Forecast,
 } as const;
 
 export function App() {
@@ -98,6 +101,7 @@ function Board({
   // the same tick cannot start two fetches of a 7 MB file.
   const listingsRef = useRef<Promise<ListingsPayload> | null>(null);
   const metricsRef = useRef<Promise<Record<string, unknown>> | null>(null);
+  const forecastRef = useRef<Promise<ForecastPayload | null> | null>(null);
   const [loaded, setLoaded] = useState({ listings: false, productMetrics: false });
 
   const lazy: LazyPayloads = useMemo(
@@ -119,6 +123,10 @@ function Board({
           return p;
         });
         return metricsRef.current;
+      },
+      forecast: () => {
+        forecastRef.current ??= loadForecast();
+        return forecastRef.current;
       },
       loaded,
     }),

@@ -1,5 +1,5 @@
 /* A hash router, hand-rolled, because the whole routing requirement is
- * "six views and some state that must survive a paste into a chat window".
+ * "seven views and some state that must survive a paste into a chat window".
  *
  * The URL is the shareable artifact: a knob setting that produced an
  * interesting board has to be reproducible by sending someone the link, and
@@ -16,6 +16,7 @@ export const VIEWS = [
   "explore",
   "coverage",
   "trends",
+  "forecast",
 ] as const;
 
 export type ViewName = (typeof VIEWS)[number];
@@ -27,6 +28,7 @@ export const VIEW_TITLES: Record<ViewName, string> = {
   explore: "Listings",
   coverage: "Coverage",
   trends: "Change",
+  forecast: "Forecast",
 };
 
 /** What each view is for, in one line, shown in the nav on a wide screen.
@@ -38,6 +40,7 @@ export const VIEW_BLURBS: Record<ViewName, string> = {
   explore: "Every listing in the latest sweep. Filter on any field.",
   coverage: "What the pipeline measured, and what it did not.",
   trends: "Day-over-day change. What stays locked until more snapshots arrive.",
+  forecast: "A paper-money forecaster, scored against the market price.",
 };
 
 export interface Route {

@@ -49,3 +49,34 @@ limit, sleep, and battery.
 
 Lingering must be on (`loginctl show-user $USER -p Linger`), or the timer
 stops at logout.
+
+## The paper forecaster
+
+A second, separate job on the same box. It forecasts two-outcome Polymarket
+markets on paper and scores each forecast against the market price when the
+market resolves. It has no wallet, no Polymarket key and no order code. It
+reads only the public Gamma API.
+
+    12:40  forecast-daily.timer
+             -> python -m forecast daily   settle, forecast (at most 20
+                                           DeepSeek calls a UTC day), report
+
+| What | Where |
+|---|---|
+| Checkout | `~/market-forecast` (its own clone, never `~/market`) |
+| Python | `~/market-forecast/.venv` (stdlib only, no packages) |
+| Ledger | `~/.forecast/ledger.sqlite3` (outside the checkout) |
+| Units | `~/.config/systemd/user/forecast-daily.{service,timer}` |
+| DeepSeek key | the `DEEPSEEK_API_KEY` line of `~/.config/newsfeed/newsfeed.env` |
+| Reddit evidence | `~/prospector/.venv/bin/prospector semantic-search`, when it exists |
+| News evidence | `~/.local/share/newsscraper/news.sqlite3`, opened read-only |
+
+    systemctl --user list-timers forecast-daily.timer
+    systemctl --user start forecast-daily.service
+    journalctl --user -u forecast-daily -n 80
+    cd ~/market-forecast && .venv/bin/python -m forecast report
+    cd ~/market-forecast && .venv/bin/python -m forecast markets   # no model call
+
+Set up: clone into `~/market-forecast`, `python3 -m venv .venv`, then
+`bash deploy/install-forecast.sh`. The job does not pull. Update the
+checkout by hand.

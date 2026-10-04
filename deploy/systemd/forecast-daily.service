@@ -1,0 +1,28 @@
+# Paper forecaster -- one day: settle resolved markets, make at most 20
+# DeepSeek forecasts, print the record. Paper only: no wallet, no orders.
+# Installed by deploy/install-forecast.sh as a USER unit on provenance-1.
+# Start by hand with
+#   systemctl --user start forecast-daily.service
+#
+# Its own checkout (~/market-forecast) and its own venv, so it never touches
+# the nightly's ~/market. The ledger lives outside the checkout. The code is
+# stdlib only, so the venv holds no packages.
+#
+# The DeepSeek key: forecast/model.py reads ONLY the DEEPSEEK_API_KEY line of
+# ~/.config/newsfeed/newsfeed.env (NewsScraper's file). No EnvironmentFile
+# here, so the other secrets in that file never reach this process.
+
+[Unit]
+Description=Paper forecaster: settle, forecast (at most 20 model calls), report
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/market-forecast
+Environment=PYTHONUNBUFFERED=1
+Environment=FORECAST_DB=%h/.forecast/ledger.sqlite3
+ExecStart=%h/market-forecast/.venv/bin/python -m forecast daily
+# The run is a few hundred small HTTP requests and 20 model calls. The cap
+# keeps a fault here from taking memory from the nightly or from wisdom.
+MemoryMax=512M
+TimeoutStartSec=1h
+Nice=10

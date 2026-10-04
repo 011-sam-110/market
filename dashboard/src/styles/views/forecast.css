@@ -1,0 +1,137 @@
+/* The forecast record view.
+ *
+ * Everything here sits under `.forecast`, like every other view stylesheet.
+ * No colour here is new. The stamp and the denominator line come from the
+ * shared Figure component, so WITHHELD looks the same on every view.
+ */
+
+.forecast .forecast__exported {
+  margin-bottom: var(--s4);
+  font-size: var(--t-label);
+  color: var(--ink-2);
+}
+
+/* Each figure draws its own rule, so the panel draws none. Two rules one
+ * gap apart read as a printing fault. */
+.forecast .forecast__readings {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s4) var(--s5);
+  border-top: 0;
+  padding-top: 0;
+}
+
+@media (min-width: 640px) {
+  .forecast .forecast__readings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1040px) {
+  .forecast .forecast__readings {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.forecast .forecast__readings > .figure {
+  border-top: var(--hair) solid var(--rule);
+  padding-top: var(--s3);
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.forecast .forecast__counts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s3) var(--s5);
+  margin: var(--s4) 0 0;
+}
+
+@media (min-width: 760px) {
+  .forecast .forecast__counts {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.forecast .forecast__count {
+  min-width: 0;
+}
+
+.forecast .forecast__count dt,
+.forecast .forecast__pair dt {
+  font-family: var(--face-narrow);
+  font-size: var(--t-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.forecast .forecast__count dd {
+  margin: 0;
+  font-size: var(--t-title);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.forecast .forecast__of {
+  font-size: var(--t-label);
+  font-weight: 400;
+  color: var(--ink-2);
+}
+
+.forecast .forecast__rows {
+  margin-top: var(--s4);
+}
+
+.forecast .forecast__row {
+  padding: var(--s3) var(--s2) var(--s4);
+  border-top: var(--hair) solid var(--rule-faint);
+}
+
+.forecast .forecast__q {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.forecast .forecast__q a,
+.forecast .forecast__evidence a {
+  color: inherit;
+}
+
+.forecast .forecast__pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s2) var(--s4);
+  margin: var(--s2) 0 0;
+}
+
+@media (min-width: 760px) {
+  .forecast .forecast__pair {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.forecast .forecast__pair dd {
+  margin: 0;
+  font-size: var(--t-title);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums lining-nums;
+  overflow-wrap: anywhere;
+}
+
+.forecast .forecast__pair dd.forecast__small {
+  font-size: var(--t-label);
+}
+
+.forecast .forecast__evidence,
+.forecast .forecast__sources {
+  margin-top: var(--s2);
+  font-size: var(--t-label);
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+
+.forecast .forecast__sources {
+  font-size: var(--t-micro);
+  color: var(--ink-3);
+}
