@@ -195,7 +195,13 @@ def news_evidence(question: str, *, db: Path | None, now: datetime,
                   limit: int = NEWS_LIMIT) -> Evidence:
     if db is None or not Path(db).is_file():
         return Evidence([], f"no news evidence: NewsScraper store not found at {db}")
-    words = keywords(question, extra)
+    # The question's own words first. The event title adds words only when
+    # the question has fewer than two ("Spread: Saints (-2.5)"). An event
+    # title such as "(excluding holiday closures)" otherwise matched stock
+    # market stories on "closed" and "holiday".
+    words = keywords(question)
+    if len(words) < 2:
+        words = keywords(question, extra)
     if not words:
         return Evidence([], "news: no keywords in the question")
     cutoff = (now - timedelta(days=days)).astimezone(timezone.utc).strftime(

@@ -294,6 +294,20 @@ def test_news_matches_two_keywords_in_the_window(tmp_path):
     assert got.status.startswith("news: 2 headlines from 3 stories in 14 days")
 
 
+def test_event_title_words_count_only_for_a_short_question(tmp_path):
+    db = _news_db(tmp_path / "news.sqlite3")
+    # Two question keywords: the event title adds nothing, so "results" and
+    # "football" from the title cannot pull in story 3.
+    got = ev.news_evidence("Iran ceasefire holds?", db=db, now=NOW,
+                           extra=["Football results"])
+    assert "keywords: iran, ceasefire, holds" in got.status
+    # One question keyword: the event title fills in.
+    got = ev.news_evidence("Spread: Iran (-1.5)", db=db, now=NOW,
+                           extra=["Football results"])
+    assert "keywords: iran, football, results" in got.status
+    assert [i["url"] for i in got.items] == ["https://pbs.example/3"]
+
+
 def test_news_store_is_opened_read_only(tmp_path):
     db = _news_db(tmp_path / "news.sqlite3")
     before = db.read_bytes()

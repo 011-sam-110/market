@@ -60,10 +60,11 @@ def _forecast(ledger: Ledger, args: argparse.Namespace) -> int:
     except gamma.GammaError as exc:
         print(f"gamma: no market list ({exc}). No forecast was made.")
         return 1
+    for line in selection.lines():
+        print(line)
     client = model.DeepSeek(key, model=args.model)
     result = agent.forecast_markets(ledger, client, selection.picked, _sources(args), now,
                                     cap=cap, clock=utc_now)
-    result.selection_lines = selection.lines()
     for line in result.lines():
         print(line)
     return 0

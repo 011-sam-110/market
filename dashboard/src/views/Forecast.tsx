@@ -244,7 +244,7 @@ function Row({ row: r }: { row: ForecastRow }) {
         </div>
       </dl>
       <p className="forecast__evidence">
-        {links.length} evidence links.{" "}
+        {links.length === 1 ? "1 evidence link." : `${links.length} evidence links.`}{" "}
         {links.slice(0, 3).map((e, i) => (
           <span key={`${e.url}-${i}`}>
             <a href={e.url ?? undefined} target="_blank" rel="noreferrer">

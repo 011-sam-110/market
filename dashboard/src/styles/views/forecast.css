@@ -11,10 +11,14 @@
   color: var(--ink-2);
 }
 
+/* Each figure draws its own rule, so the panel draws none. Two rules one
+ * gap apart read as a printing fault. */
 .forecast .forecast__readings {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--s4) var(--s5);
+  border-top: 0;
+  padding-top: 0;
 }
 
 @media (min-width: 640px) {
