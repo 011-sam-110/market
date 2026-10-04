@@ -7,6 +7,7 @@
  */
 
 import type { Bundle } from "./types";
+import type { ForecastPayload } from "./forecast";
 import type { KnobState } from "./useKnobs";
 import type { ListingsPayload } from "./types";
 import type { ViewName } from "./router";
@@ -16,6 +17,9 @@ export interface LazyPayloads {
   listings: () => Promise<ListingsPayload>;
   /** Full `Metrics` per product, 4.1 MB, keyed by product key. */
   productMetrics: () => Promise<Record<string, unknown>>;
+  /** The paper forecast record, or null when the export did not write it.
+   * Separate from the eBay bundle, so the board loads without it. */
+  forecast: () => Promise<ForecastPayload | null>;
   /** What is already in memory, so a view can render without waiting. */
   loaded: { listings: boolean; productMetrics: boolean };
 }

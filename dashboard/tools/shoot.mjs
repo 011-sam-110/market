@@ -36,7 +36,7 @@ const WIDTHS = [
   { name: "zoom80", width: 1800, height: 1000, dsf: 1.5 },
 ];
 
-const VIEWS = ["shortlist", "console", "niches", "explore", "coverage", "trends"];
+const VIEWS = ["shortlist", "console", "niches", "explore", "coverage", "trends", "forecast"];
 
 const console_errors = [];
 

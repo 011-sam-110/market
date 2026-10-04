@@ -1,6 +1,6 @@
 /* Drawn icons, one stroke weight, one grid.
  *
- * Six marks for six views. They are authored rather than pulled from a
+ * Seven marks for seven views. They are authored rather than pulled from a
  * library so they can carry the world's own vocabulary — a fanfold sheet, a
  * ruled field, a load path, a stamp — instead of the generic chart/table/gear
  * set every dashboard ships. Emoji would be the other cheap route and are
@@ -17,7 +17,8 @@ export type IconName =
   | "niches"
   | "explore"
   | "coverage"
-  | "trends";
+  | "trends"
+  | "forecast";
 
 const PATHS: Record<IconName, ReactElement> = {
   // a fanfold sheet with a ruled entry on it
@@ -65,6 +66,14 @@ const PATHS: Record<IconName, ReactElement> = {
     <>
       <path d="M3 17l5-5 4 3 5-8 4 4" />
       <path d="M3 21h18" />
+    </>
+  ),
+  // a forecast mark against the line it is scored on
+  forecast: (
+    <>
+      <path d="M3 20h18" />
+      <path d="M5 20V9M12 20V4M19 20v-7" strokeDasharray="2 2.5" />
+      <path d="M3 13l6-3 6 2 6-5" />
     </>
   ),
 };
