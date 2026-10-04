@@ -439,7 +439,8 @@ def _render_health_html(health: "Health | None") -> str:
 
 def render_html(rows: Sequence[BoardRow], *, title: str,
                 generated_at: datetime,
-                health: "Health | None" = None) -> str:
+                health: "Health | None" = None,
+                notes: Sequence[str] = ()) -> str:
     """A self-contained HTML board -- no CDN, no external font, no fetch.
     Everything is one inline `<style>` block and literal table markup; the
     guard is that no `http://` or `https://` substring appears anywhere in
@@ -449,6 +450,11 @@ def render_html(rows: Sequence[BoardRow], *, title: str,
     unchanged: None emits no banner at all. `write_report` below always
     supplies one, which is what makes the published report unable to hide a
     failed night.
+
+    `notes` are plain-text lines printed under the title, escaped. The board
+    script passes the Tier 3 lines (both dates, the gap, the listings seen
+    on both dates), so the published report says which window every
+    sell-through figure covers.
     """
     knob_names = list(dict.fromkeys(k.knob for r in rows for k in r.knobs))
     knob_headers = "".join(f"<th>{html.escape(name)}</th>" for name in knob_names)
@@ -500,6 +506,8 @@ def render_html(rows: Sequence[BoardRow], *, title: str,
         f"<h1>{html.escape(title)}</h1>"
         f"<div class=\"meta\">generated {html.escape(generated_at.isoformat())}"
         f" -- {len(rows)} rows</div>"
+        + "".join(f"<div class=\"meta\">{html.escape(line)}</div>"
+                  for line in notes)
         + _render_health_html(health)
         + "<table><thead><tr>"
         "<th>level</th><th>key</th><th>tier</th><th>str_source</th>"
@@ -512,7 +520,8 @@ def render_html(rows: Sequence[BoardRow], *, title: str,
 
 def write_report(rows: Sequence[BoardRow], data_dir: Path | str, *,
                  name: str | None = None,
-                 health: "Health | None" = None) -> Path:
+                 health: "Health | None" = None,
+                 notes: Sequence[str] = ()) -> Path:
     """Write the HTML board under DATA_DIR/reports/. Returns the path.
 
     ALWAYS carries a health banner. `data_dir` is already everything
@@ -531,7 +540,7 @@ def write_report(rows: Sequence[BoardRow], data_dir: Path | str, *,
         health = heartbeat.health_for(data_dir, now=generated_at)
     path.write_text(
         render_html(rows, title="eBay niche board", generated_at=generated_at,
-                    health=health),
+                    health=health, notes=notes),
         encoding="utf-8",
     )
     return path

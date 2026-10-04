@@ -30,11 +30,32 @@ decide that on the caller's behalf.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+import math
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date
 
 from phoneloop.market_store import MarketStore
+from phoneloop.metrics import MIN_COMPARABLE_WINDOW_FRACTION, STR_WINDOW_DAYS
+
+#: The shortest window `metrics.check` judges sell-through on:
+#: STR_WINDOW_DAYS x MIN_COMPARABLE_WINDOW_FRACTION = 24.0 days. Read from
+#: metrics.py so the two cannot drift. This module does not change it.
+MIN_WINDOW_DAYS: float = STR_WINDOW_DAYS * MIN_COMPARABLE_WINDOW_FRACTION
+
+#: The smallest gap, in calendar dates, between the Tier 3 baseline and the
+#: newest snapshot date. It is 25, not 24.
+#:
+#: A snapshot date is a UTC day, not an instant. Two observations 24 dates
+#: apart can be anything from 23 to 25 days apart in elapsed time, and
+#: `metrics.check` judges the elapsed time. On the prod store, the pair
+#: 2026-09-10 -> 2026-10-04 (24 dates) measured a median of 23.998 days, and
+#: 4,409 of the 4,726 listings seen on both dates were under 24.0 days. So a
+#: 24-date baseline withholds the verdict on almost every row, and the board
+#: prints "24-day window ... not comparable". With a gap of
+#: ceil(MIN_WINDOW_DAYS) + 1 dates, every listing's elapsed time is more than
+#: MIN_WINDOW_DAYS, whatever time of day each sweep ran.
+BASELINE_MIN_GAP_DAYS: int = math.ceil(MIN_WINDOW_DAYS) + 1
 
 
 def _as_date(value: date | str) -> date:
@@ -93,6 +114,12 @@ class Difference:
     n_listings: int
     n_known: int
     coverage: float
+    # Listings with a row on BOTH dates, whatever their sold_qty. Not the
+    # same as n_known: a listing seen on both dates with no sold count on one
+    # side is "seen on both" but has no delta. Over a 25-day baseline this
+    # count falls a lot, because only 65.6% of listings returned after ONE
+    # night (2026-08-28 -> 08-29), so the board prints it.
+    n_on_both: int = 0
 
     def by_product(self, key_of: Callable[[str], str | None]) -> dict[str, tuple[int, int]]:
         """product_key -> (delta_sold, delta_days), summing only known deltas.
@@ -180,4 +207,71 @@ def difference(store: MarketStore, date_a: date | str, date_b: date | str, *,
     return Difference(
         date_a=da, date_b=db, listings=listings,
         n_listings=n_listings, n_known=n_known, coverage=coverage,
+        n_on_both=len(set(rows_a) & set(rows_b)),
     )
+
+
+@dataclass(frozen=True)
+class Baseline:
+    """The two snapshot dates Tier 3 differences.
+
+    `long_enough` is True when `date_a` is BASELINE_MIN_GAP_DAYS or more
+    dates before `date_b`. When it is False, the pair is the fallback (the
+    two newest dates), and the sell-through window it gives is not
+    comparable to the 30-day threshold. `metrics.check` withholds that
+    verdict by itself. This flag only lets the board say why.
+    """
+
+    date_a: date
+    date_b: date
+    long_enough: bool
+
+    @property
+    def gap_days(self) -> int:
+        return (self.date_b - self.date_a).days
+
+
+def pick_baseline(dates: Sequence[date | str], *,
+                  min_gap_days: int = BASELINE_MIN_GAP_DAYS) -> Baseline | None:
+    """Which snapshot date to difference the newest date against.
+
+    The newest date that is `min_gap_days` or more dates before the newest
+    date. When no such date exists, the two newest dates, marked
+    `long_enough=False`. None when there are fewer than two dates.
+
+    The newest date was ALWAYS differenced against the date before it,
+    which on a nightly schedule is a window of about 1 day. That window can
+    never pass MIN_COMPARABLE_WINDOW_FRACTION, so sell-through stayed
+    unknown however many nights the store collected.
+    """
+    ordered = sorted({_as_date(d) for d in dates})
+    if len(ordered) < 2:
+        return None
+    newest = ordered[-1]
+    old_enough = [d for d in ordered[:-1] if (newest - d).days >= min_gap_days]
+    if old_enough:
+        return Baseline(date_a=old_enough[-1], date_b=newest, long_enough=True)
+    return Baseline(date_a=ordered[-2], date_b=newest, long_enough=False)
+
+
+def describe_baseline(baseline: Baseline, diff: Difference) -> str:
+    """The Tier 3 lines the board prints above its tables: both dates, the
+    gap, whether the pair is the long baseline or the fallback, and how many
+    listings were seen on both dates."""
+    gap = baseline.gap_days
+    head = (f"Tier 3 difference: {diff.date_a} -> {diff.date_b} "
+            f"({gap}-day gap)")
+    if baseline.long_enough:
+        why = (f"baseline = the newest snapshot {BASELINE_MIN_GAP_DAYS} or "
+               f"more days before {diff.date_b}")
+    else:
+        why = (f"no snapshot {BASELINE_MIN_GAP_DAYS} or more days before "
+               f"{diff.date_b}, so this is the fallback pair (the two newest "
+               f"dates). Sell-through over it is not comparable to the "
+               f"{STR_WINDOW_DAYS}-day threshold")
+    return "\n".join([
+        f"{head}; {why}",
+        f"  {diff.n_on_both} listings seen on both dates; "
+        f"{diff.n_known}/{diff.n_listings} with a known delta "
+        f"({diff.coverage:.0%} coverage)",
+    ])

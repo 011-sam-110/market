@@ -42,7 +42,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from phoneloop import board, catalog_ebay, config, heartbeat  # noqa: E402
 from phoneloop.knobs import Knobs  # noqa: E402
 from phoneloop.market_store import MarketStore  # noqa: E402
-from phoneloop.snapshots import difference  # noqa: E402
+from phoneloop.snapshots import (describe_baseline, difference,  # noqa: E402
+                                  pick_baseline)
 
 # Over-fetch factor applied before the IN_SCOPE filter below, so filtering
 # out a few stray leaves cannot silently shrink the printed table below
@@ -86,11 +87,13 @@ def main() -> int:
         return 1
 
     diff = None
-    if len(dates) >= 2:
-        diff = difference(store, dates[-2], dates[-1])
-        print(f"Tier 3 difference: {diff.date_a} -> {diff.date_b}, "
-             f"{diff.n_known}/{diff.n_listings} listings with a known delta "
-             f"({diff.coverage:.0%} coverage)")
+    tier3_lines: list[str] = []
+    baseline = pick_baseline(dates)
+    if baseline is not None:
+        diff = difference(store, baseline.date_a, baseline.date_b)
+        tier3_lines = describe_baseline(baseline, diff).splitlines()
+        for line in tier3_lines:
+            print(line)
     else:
         print(f"only one snapshot date ({dates[-1]}) -- every sell-through "
              "figure below is 'lifetime', not 'window'")
@@ -123,7 +126,8 @@ def main() -> int:
         all_rows += product_rows
 
     if args.html:
-        path = board.write_report(all_rows, cfg.DATA_DIR, health=health)
+        path = board.write_report(all_rows, cfg.DATA_DIR, health=health,
+                                  notes=[ln.strip() for ln in tier3_lines])
         print()
         print(f"wrote {path}")
 
