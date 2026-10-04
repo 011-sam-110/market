@@ -1,0 +1,118 @@
+{
+  "runs": [
+    {
+      "meta": {
+        "started_at": "2026-10-04T00:17:23+00:00",
+        "machine": "provenance-1",
+        "machine_label": "provenance-1 (Fedora, LAN box, home line)",
+        "platform": "Linux-7.2.7-200.fc44.x86_64-x86_64-with-glibc2.43",
+        "python": "3.14.7",
+        "scrapling": "0.4.15",
+        "patchright": "1.63.0",
+        "curl_cffi": "0.16.3",
+        "egress": {
+          "ip": "86.20.84.13",
+          "mullvad_exit_ip": false,
+          "organization": "Virgin Media",
+          "country": "United Kingdom",
+          "city": "Brighton"
+        },
+        "targets": [
+          "ebay"
+        ],
+        "variants": [
+          "fetcher",
+          "stealth_headless"
+        ],
+        "gap_s": 6.0,
+        "finished_at": "2026-10-04T00:17:50+00:00"
+      },
+      "results": [
+        {
+          "target": "ebay",
+          "page": 1,
+          "variant": "fetcher",
+          "url": "https://www.ebay.co.uk/sch/i.html?_sacat=20742&_fsrp=1&_ipg=240&_pgn=1&_udlo=15&_udhi=55&_dmd=1",
+          "status": 200,
+          "signal": true,
+          "signal_detail": "246 result rows",
+          "seconds": 2.4,
+          "final_url": "https://www.ebay.co.uk/sch/i.html?_sacat=20742&_fsrp=1&_ipg=240&_pgn=1&_udlo=15&_udhi=55&_dmd=1",
+          "title": "Dog Supplies | eBay",
+          "error": ""
+        },
+        {
+          "target": "ebay",
+          "page": 2,
+          "variant": "fetcher",
+          "url": "https://www.ebay.co.uk/sch/i.html?_sacat=20742&_fsrp=1&_ipg=240&_pgn=2&_udlo=15&_udhi=55&_dmd=1",
+          "status": 200,
+          "signal": true,
+          "signal_detail": "254 result rows",
+          "seconds": 2.8,
+          "final_url": "https://www.ebay.co.uk/sch/i.html?_sacat=20742&_fsrp=1&_ipg=240&_pgn=2&_udlo=15&_udhi=55&_dmd=1",
+          "title": "Dog Supplies | eBay",
+          "error": ""
+        },
+        {
+          "target": "ebay",
+          "page": 1,
+          "variant": "stealth_headless",
+          "url": "https://www.ebay.co.uk/sch/i.html?_sacat=20742&_fsrp=1&_ipg=240&_pgn=1&_udlo=15&_udhi=55&_dmd=1",
+          "status": 200,
+          "signal": true,
+          "signal_detail": "247 result rows",
+          "seconds": 10.8,
+          "final_url": "https://www.ebay.co.uk/sch/i.html?_sacat=20742&_fsrp=1&_ipg=240&_pgn=1&_udlo=15&_udhi=55&_dmd=1",
+          "title": "Dog Supplies | eBay",
+          "error": ""
+        },
+        {
+          "target": "ebay",
+          "page": 2,
+          "variant": "stealth_headless",
+          "url": "https://www.ebay.co.uk/sch/i.html?_sacat=20742&_fsrp=1&_ipg=240&_pgn=2&_udlo=15&_udhi=55&_dmd=1",
+          "status": 403,
+          "signal": false,
+          "signal_detail": "blocked page (Something went wrong / Security measure / captcha)",
+          "seconds": 3.7,
+          "final_url": "https://www.ebay.co.uk/sch/i.html?_sacat=20742&_fsrp=1&_ipg=240&_pgn=2&_udlo=15&_udhi=55&_dmd=1",
+          "title": "Error Page | eBay",
+          "error": ""
+        }
+      ]
+    },
+    {
+      "meta": {
+        "started_at": "2026-10-04T00:25:13+00:00",
+        "machine": "Sams_Laptop",
+        "machine_label": "laptop (Windows 11)",
+        "platform": "Windows-11-10.0.26200-SP0",
+        "python": "3.13.3",
+        "scrapling": "0.4.15",
+        "patchright": "1.63.0",
+        "curl_cffi": "0.16.3",
+        "egress": {
+          "ip": "194.110.115.21",
+          "mullvad_exit_ip": true,
+          "organization": "M247",
+          "country": "Belgium",
+          "city": "Brussels"
+        },
+        "targets": [
+          "ebay",
+          "cex",
+          "reuters"
+        ],
+        "variants": [
+          "fetcher",
+          "stealth_headless",
+          "stealth_headed"
+        ],
+        "gap_s": 6.0,
+        "stopped": "egress is a Mullvad exit; the script sent no target request"
+      },
+      "results": []
+    }
+  ]
+}
