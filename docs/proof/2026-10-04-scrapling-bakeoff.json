@@ -84,6 +84,159 @@
     },
     {
       "meta": {
+        "started_at": "2026-10-04T00:30:40+00:00",
+        "machine": "provenance-1",
+        "machine_label": "provenance-1 (Fedora, LAN box, home line)",
+        "platform": "Linux-7.2.7-200.fc44.x86_64-x86_64-with-glibc2.43",
+        "python": "3.14.7",
+        "scrapling": "0.4.15",
+        "patchright": "1.63.0",
+        "curl_cffi": "0.16.3",
+        "egress": {
+          "ip": "86.20.84.13",
+          "mullvad_exit_ip": false,
+          "organization": "Virgin Media",
+          "country": "United Kingdom",
+          "city": "Brighton"
+        },
+        "targets": [
+          "cex",
+          "reuters"
+        ],
+        "variants": [
+          "fetcher",
+          "stealth_headless"
+        ],
+        "gap_s": 6.0,
+        "finished_at": "2026-10-04T00:32:17+00:00"
+      },
+      "results": [
+        {
+          "target": "cex",
+          "page": 1,
+          "variant": "fetcher",
+          "url": "https://uk.webuy.com/sell/search?stext=iphone%2012%20128gb",
+          "status": 200,
+          "signal": false,
+          "signal_detail": "no CASH price on the page",
+          "seconds": 0.3,
+          "final_url": "https://uk.webuy.com/sell/search/?stext=iphone%2012%20128gb",
+          "title": "CeX",
+          "error": ""
+        },
+        {
+          "target": "cex",
+          "page": 2,
+          "variant": "fetcher",
+          "url": "https://uk.webuy.com/sell/search?stext=iphone%2013%20128gb",
+          "status": 200,
+          "signal": false,
+          "signal_detail": "no CASH price on the page",
+          "seconds": 0.1,
+          "final_url": "https://uk.webuy.com/sell/search/?stext=iphone%2013%20128gb",
+          "title": "CeX",
+          "error": ""
+        },
+        {
+          "target": "cex",
+          "page": 1,
+          "variant": "stealth_headless",
+          "url": "https://uk.webuy.com/sell/search?stext=iphone%2012%20128gb",
+          "status": 200,
+          "signal": true,
+          "signal_detail": "17 CASH prices, first £110.00",
+          "seconds": 6.0,
+          "final_url": "https://uk.webuy.com/sell/search/?stext=iphone+12+128gb",
+          "title": "CeX (UK) : Stock search",
+          "error": "",
+          "browser_checks": {
+            "cash_visible": true
+          }
+        },
+        {
+          "target": "cex",
+          "page": 2,
+          "variant": "stealth_headless",
+          "url": "https://uk.webuy.com/sell/search?stext=iphone%2013%20128gb",
+          "status": 200,
+          "signal": true,
+          "signal_detail": "17 CASH prices, first £123.00",
+          "seconds": 2.9,
+          "final_url": "https://uk.webuy.com/sell/search/?stext=iphone+13+128gb",
+          "title": "CeX (UK) : Stock search",
+          "error": "",
+          "browser_checks": {
+            "cash_visible": true
+          }
+        },
+        {
+          "target": "reuters",
+          "page": 1,
+          "variant": "fetcher",
+          "url": "https://www.reuters.com/world/africa/",
+          "status": 401,
+          "signal": false,
+          "signal_detail": "DataDome captcha page",
+          "seconds": 0.2,
+          "final_url": "https://www.reuters.com/world/africa/",
+          "title": "reuters.com",
+          "error": "",
+          "x_datadome": "protected"
+        },
+        {
+          "target": "reuters",
+          "page": 2,
+          "variant": "fetcher",
+          "url": "https://www.reuters.com/world/europe/",
+          "status": 401,
+          "signal": false,
+          "signal_detail": "DataDome captcha page",
+          "seconds": 0.1,
+          "final_url": "https://www.reuters.com/world/europe/",
+          "title": "reuters.com",
+          "error": "",
+          "x_datadome": "protected"
+        },
+        {
+          "target": "reuters",
+          "page": 1,
+          "variant": "stealth_headless",
+          "url": "https://www.reuters.com/world/africa/",
+          "status": 401,
+          "signal": false,
+          "signal_detail": "DataDome captcha page",
+          "seconds": 32.0,
+          "final_url": "https://www.reuters.com/world/africa/",
+          "title": "reuters.com",
+          "error": "",
+          "x_datadome": "protected",
+          "browser_checks": {
+            "fusion_live": false,
+            "fusion_wait_s": 30.2
+          }
+        },
+        {
+          "target": "reuters",
+          "page": 2,
+          "variant": "stealth_headless",
+          "url": "https://www.reuters.com/world/europe/",
+          "status": 401,
+          "signal": false,
+          "signal_detail": "DataDome captcha page",
+          "seconds": 31.2,
+          "final_url": "https://www.reuters.com/world/europe/",
+          "title": "reuters.com",
+          "error": "",
+          "x_datadome": "protected",
+          "browser_checks": {
+            "fusion_live": false,
+            "fusion_wait_s": 30.2
+          }
+        }
+      ]
+    },
+    {
+      "meta": {
         "started_at": "2026-10-04T00:25:13+00:00",
         "machine": "Sams_Laptop",
         "machine_label": "laptop (Windows 11)",
