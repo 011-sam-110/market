@@ -37,7 +37,9 @@ from pathlib import Path
 
 from phoneloop import population
 from phoneloop.board import _fmt, _fmt_pence
+from phoneloop.metrics import STR_WINDOW_DAYS
 from phoneloop.population import Build
+from phoneloop.snapshots import BASELINE_MIN_GAP_DAYS
 
 _REPORT_DIR_NAME = "reports"
 
@@ -1321,14 +1323,35 @@ def _render_sell_through(b: Build) -> str:
             window = _fig(f'{r["str_window_bp"] / 100:.1f}%',
                           _of(r["n_known"], r["n_listings"],
                               "listings with a known delta"))
-            ok = r["str_window_bp"] >= r["threshold_bp"]
-            verdict = (f'<span class="{"pass" if ok else "fail"}">'
-                       f'{"PASS" if ok else "FAIL"}</span>')
+            # The knob's verdict, not a fresh comparison here: a window too
+            # short for the 30-day threshold is withheld, never a FAIL.
+            if r["passed"] is None:
+                verdict = ('<span class="unknown">not comparable</span>'
+                           f'<br><small>{_e(r["note"])}</small>')
+            else:
+                ok = r["passed"]
+                verdict = (f'<span class="{"pass" if ok else "fail"}">'
+                           f'{"PASS" if ok else "FAIL"}</span>')
         rows.append((_e(r["niche"]), _e(r["str_source"]), window, verdict))
     banner = (f'sell_through: {p["unreadable"]} of {p["total"]} niches '
               f'unreadable')
+    pair = p.get("pair")
+    pair_line = ""
+    if pair is not None:
+        kind = (f"the newest snapshot {BASELINE_MIN_GAP_DAYS} or more "
+                "days older" if pair["long_enough"] else
+                "fallback: the two newest dates, not comparable to the "
+                f"{STR_WINDOW_DAYS}-day threshold")
+        pair_line = (f'<p class="meta">Window: {_e(pair["date_a"])} → '
+                     f'{_e(pair["date_b"])} ({_e(pair["gap_days"])}-day gap, '
+                     f'{_e(kind)}). '
+                     + _fig(_num(pair["n_on_both"]),
+                            _of(pair["n_on_both"], pair["n_listings"],
+                                "listings seen on both dates"))
+                     + '</p>')
     body = [
         f'<p class="{"flag" if p["unreadable"] else "meta"}">{_e(banner)}</p>',
+        pair_line,
         f'<p class="meta">Threshold: {p["threshold_bp"] / 100:.0f}% '
         '(knobs.str_threshold_bp). A negative delta is kept — a relist resets '
         "eBay's lifetime counter — and an unknown is never coerced to zero.</p>",
@@ -1366,7 +1389,7 @@ def _render_churn(b: Build) -> str:
             f'<div class="band">{_fig(_num(p["gone"]), _of(p["gone"], p["gone"] + p["persisting"], "gone since the previous date"))}</div>'
             f'<div class="band">{_fig(_num(p["persisting"]), _of(p["persisting"], b.n, "persisting"))}</div>'
             f'<div class="band">{_fig(_num(p["price_moved"]), _of(p["price_moved"], p["price_known"], "with a price on both dates"))}</div>'
-            f'<div class="band">{_fig(_num(p["sold_known"]), _of(p["sold_known"], p["sold_listings"], "with a known sold delta"))}</div>'
+            f'<div class="band">{_fig(_num(p["sold_known"]), _of(p["sold_known"], p["sold_listings"], "with a known sold delta, " + p["sold_pair"]))}</div>'
             '</div>')
     return _panel("population_churn", "P19 · Population churn",
                   "What changed since the last sweep?", body)

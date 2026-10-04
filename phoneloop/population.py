@@ -46,7 +46,8 @@ from phoneloop.knobs import Knobs
 from phoneloop.market_store import ROW_FIELDS, MarketStore
 from phoneloop.footprint import (Comparability, compare,
                                 read_footprint)
-from phoneloop.snapshots import Difference, difference
+from phoneloop.snapshots import (Baseline, Difference, difference,
+                                 pick_baseline)
 
 # How many niches rank_niches is asked for. The in-scope catalogue holds 43
 # leaves and the store 67, so this is "all of them" with headroom, not a
@@ -163,6 +164,10 @@ class Build:
     #: over time, and every consumer of `diff` has to say so. See
     #: phoneloop/footprint.py.
     comparability: Comparability | None = None
+    #: Which two dates `diff` covers, and whether the pair is the long
+    #: baseline or the fallback. None when there is no difference. See
+    #: snapshots.pick_baseline.
+    baseline: Baseline | None = None
     # Memo for the handful of results two panels genuinely share. Every
     # `store.sql()` call opens a connection and rebuilds the parquet view, so
     # a query run twice costs about as much as a whole extra panel; two
@@ -214,14 +219,19 @@ def build(data_dir: Path | str, knobs: Knobs) -> Build:
     extra = [_parse_extra(r.get("extra")) for r in rows]
     in_scope = set(catalog_ebay.top_level_of().keys())
 
-    diff = difference(store, dates[-2], dates[-1]) if len(dates) >= 2 else None
+    # The newest date against a baseline 25 or more dates older, not
+    # against last night. See snapshots.pick_baseline.
+    baseline = pick_baseline(dates)
+    diff = (difference(store, baseline.date_a, baseline.date_b)
+            if baseline is not None else None)
     # Read off each night's own checkpoint, not off run_daily.cmd. The config
     # says what was asked for; the checkpoint says what happened, including
     # the shards eBay blocked, and those are exactly the nights that differ.
+    # The two nights compared are the two nights differenced.
     comparability = (
-        compare(read_footprint(data_dir, dates[-2]),
-                read_footprint(data_dir, dates[-1]))
-        if len(dates) >= 2 else None)
+        compare(read_footprint(data_dir, baseline.date_a),
+                read_footprint(data_dir, baseline.date_b))
+        if baseline is not None else None)
 
     niches = [r for r in rank_niches(store, knobs, difference=diff,
                                      limit=_NICHE_LIMIT)
@@ -241,7 +251,7 @@ def build(data_dir: Path | str, knobs: Knobs) -> Build:
     return Build(store=store, data_dir=data_dir, knobs=knobs, dates=dates,
                  day=day, rows=rows, extra=extra, in_scope=in_scope,
                  niches=niches, groups=groups, diff=diff,
-                 comparability=comparability)
+                 comparability=comparability, baseline=baseline)
 
 
 # --- shared helpers ----------------------------------------------------------
@@ -1344,18 +1354,32 @@ def panel_sell_through(b: Build) -> tuple[object, str | None]:
     em-dash. A panel that appeared out of nowhere on date 2 would not be
     comparable against what is on the screen today.
     """
-    rows = [{
-        "niche": r.key,
-        "leaf": r.leaf_category_id,
-        "n_listings": r.metrics.n_listings,
-        "str_window_bp": r.metrics.str_window_bp,
-        "n_known": r.metrics.str_window_denominator,
-        "str_source": r.str_source,
-        "threshold_bp": b.knobs.str_threshold_bp,
-    } for r in b.niches]
+    rows = []
+    for r in b.niches:
+        k = _knob(r, "sell_through")
+        rows.append({
+            "niche": r.key,
+            "leaf": r.leaf_category_id,
+            "n_listings": r.metrics.n_listings,
+            "str_window_bp": r.metrics.str_window_bp,
+            "n_known": r.metrics.str_window_denominator,
+            "str_source": r.str_source,
+            "threshold_bp": b.knobs.str_threshold_bp,
+            # The knob's own verdict. None = withheld (no window, or a
+            # window too short for the 30-day threshold).
+            "passed": k.passed if k is not None else None,
+            "note": k.note if k is not None else "",
+        })
     unreadable = sum(1 for r in rows if r["str_window_bp"] is None)
+    pair = None
+    if b.baseline is not None and b.diff is not None:
+        pair = {"date_a": b.diff.date_a, "date_b": b.diff.date_b,
+                "gap_days": b.baseline.gap_days,
+                "long_enough": b.baseline.long_enough,
+                "n_on_both": b.diff.n_on_both,
+                "n_listings": b.diff.n_listings}
     payload = {"rows": rows, "unreadable": unreadable, "total": len(rows),
-               "threshold_bp": b.knobs.str_threshold_bp}
+               "threshold_bp": b.knobs.str_threshold_bp, "pair": pair}
     if len(b.dates) < 2:
         return payload, unlock(need=2, have=len(b.dates), latest=b.day)
     return payload, None
@@ -1387,6 +1411,7 @@ def panel_population_churn(b: Build) -> tuple[object, str | None]:
             if now[sid].get("price_pence") is not None
             and prev[sid].get("price_pence") is not None),
         "sold_known": b.diff.n_known, "sold_listings": b.diff.n_listings,
+        "sold_pair": f"{b.diff.date_a} -> {b.diff.date_b}",
         "series": scaffold["series"],
     }, None
 
