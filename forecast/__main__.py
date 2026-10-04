@@ -4,9 +4,11 @@
     python -m forecast score      settle resolved markets, then report
     python -m forecast report     report only (no network)
     python -m forecast markets    show what today's pick would be (no model call)
+    python -m forecast prune-evidence   remove Reddit text older than 7 days
 
 Common flags: --db (default ~/.forecast/ledger.sqlite3, or FORECAST_DB).
 `daily` exits 2 when there is no DeepSeek key, after it settles and reports.
+`daily` runs the Reddit text prune first, before anything else.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from pathlib import Path
 from forecast import HARD_DAILY_CALLS
 from forecast import agent, gamma, model, score
 from forecast import evidence as ev
+from forecast import retention
 from forecast.ledger import Ledger, utc_now
 
 
@@ -89,7 +92,8 @@ def _markets(ledger: Ledger, args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m forecast", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=["daily", "score", "report", "markets"])
+    parser.add_argument("command", choices=["daily", "score", "report", "markets",
+                                                "prune-evidence"])
     parser.add_argument("--db", default=None, help="ledger path (outside the repo)")
     parser.add_argument("--max-calls", type=int,
                         default=int(os.environ.get("FORECAST_MAX_CALLS", HARD_DAILY_CALLS)),
@@ -110,6 +114,12 @@ def main(argv: list[str] | None = None) -> int:
 
     with Ledger(args.db) as ledger:
         print(f"ledger: {ledger.path}")
+        if args.command in ("daily", "prune-evidence"):
+            # First, before any network call: a run that fails later must
+            # still have removed the stale Reddit text.
+            print(retention.prune_line(retention.prune_ledger(ledger, utc_now())))
+            if args.command == "prune-evidence":
+                return 0
         if args.command == "report":
             _settle_and_report(ledger, check=False)
             return 0

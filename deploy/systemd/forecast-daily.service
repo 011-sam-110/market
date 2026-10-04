@@ -20,6 +20,7 @@ Type=oneshot
 WorkingDirectory=%h/market-forecast
 Environment=PYTHONUNBUFFERED=1
 Environment=FORECAST_DB=%h/.forecast/ledger.sqlite3
+Environment=FORECAST_PROSPECTOR_DB=%h/prospector-data/prospector.db
 ExecStart=%h/market-forecast/.venv/bin/python -m forecast daily
 # The run is a few hundred small HTTP requests and 20 model calls. The cap
 # keeps a fault here from taking memory from the nightly or from wisdom.
