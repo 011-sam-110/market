@@ -156,6 +156,10 @@ class Ledger:
         self.conn = sqlite3.connect(str(self.path), isolation_level=None, timeout=30)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
+        # Removed text must leave the file, not only the row. Without this,
+        # SQLite leaves the old bytes of a rewritten row in free space, and
+        # Reddit text that retention.py removed could still be read from disk.
+        self.conn.execute("PRAGMA secure_delete = ON")
         self.conn.executescript(SCHEMA)
         self.conn.execute(
             "INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', ?)",
@@ -266,6 +270,12 @@ class Ledger:
 
     def all_forecasts(self) -> list[sqlite3.Row]:
         return list(self.conn.execute("SELECT * FROM forecasts ORDER BY forecast_id"))
+
+    def replace_evidence(self, updates: list[tuple[str, int]]) -> None:
+        """Write new evidence_json values, as (json_text, forecast_id) pairs."""
+        with self._write() as conn:
+            conn.executemany(
+                "UPDATE forecasts SET evidence_json = ? WHERE forecast_id = ?", updates)
 
     def settle(self, forecast_id: int, *, status: str, final_price_a: float,
                pnl: float, settled_at: datetime) -> None:

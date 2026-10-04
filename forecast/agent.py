@@ -31,6 +31,7 @@ from forecast import gamma
 from forecast.ledger import CallBudgetExhausted, Ledger, iso
 from forecast.model import (PROMPT_VERSION, AnswerError, DeepSeek, ModelError,
                             build_prompt, parse_answer)
+from forecast.retention import strip_reddit_text
 
 
 @dataclass(frozen=True)
@@ -161,6 +162,9 @@ def forecast_markets(ledger: Ledger, client: DeepSeek, picked: list[gamma.Market
                            completion_tokens=completion.completion_tokens)
         used_set = set(used)
         evidence_rows = [{**item, "used": item["id"] in used_set} for item in items]
+        # A Reddit post already older than the retention window keeps no text
+        # in the ledger, even for the one day until the next prune.
+        evidence_rows, _ = strip_reddit_text(evidence_rows, now, now)
         free = ledger.free_capital()
         stake = paper_stake(probability, market, free)
         row = {

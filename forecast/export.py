@@ -5,6 +5,12 @@ same writer as the rest of the bundle (phoneloop.dashexport.write_json:
 sorted keys, no NaN, atomic). The payload is the scorer's own report plus
 the most recent forecasts. Nothing here computes a second version of a
 score figure: the dashboard shows what score.build_report() returns.
+
+Reddit text: the payload never carries a Reddit quote. It carries a Reddit
+title only while the retention rule (forecast/retention.py) still allows
+it, checked again here at export time. The export can run on a copied
+ledger that no prune has touched, so it does not trust the ledger to be
+pruned.
 """
 
 from __future__ import annotations
@@ -14,13 +20,24 @@ from datetime import datetime
 from typing import Any
 
 from forecast.ledger import Ledger
+from forecast.retention import reddit_text_expired
 from forecast.score import build_report
 
 PAYLOAD_VERSION = 1
 RECENT_LIMIT = 60
 
 
-def recent_rows(ledger: Ledger, limit: int = RECENT_LIMIT) -> list[dict[str, Any]]:
+def _evidence_out(e: dict, stored_at: object, now: datetime) -> dict[str, Any]:
+    """One evidence entry for the browser: kind, link, title, used. Never a quote."""
+    title = e.get("title")
+    if e.get("kind") == "reddit" and reddit_text_expired(e, stored_at, now):
+        title = None
+    return {"kind": e.get("kind"), "url": e.get("url"), "title": title,
+            "used": bool(e.get("used"))}
+
+
+def recent_rows(ledger: Ledger, now: datetime, limit: int = RECENT_LIMIT
+                ) -> list[dict[str, Any]]:
     rows = list(ledger.conn.execute(
         "SELECT * FROM forecasts ORDER BY forecast_id DESC LIMIT ?", (limit,)))
     out = []
@@ -47,8 +64,7 @@ def recent_rows(ledger: Ledger, limit: int = RECENT_LIMIT) -> list[dict[str, Any
             "is_sports": bool(r["is_sports"]),
             "reddit_status": r["reddit_status"],
             "news_status": r["news_status"],
-            "evidence": [{"kind": e.get("kind"), "url": e.get("url"),
-                          "title": e.get("title"), "used": bool(e.get("used"))}
+            "evidence": [_evidence_out(e, r["created_at"], now)
                          for e in evidence if isinstance(e, dict)],
         })
     return out
@@ -57,7 +73,7 @@ def recent_rows(ledger: Ledger, limit: int = RECENT_LIMIT) -> list[dict[str, Any
 def build_payload(ledger: Ledger, now: datetime, *, git_sha: str = "unknown"
                   ) -> dict[str, Any]:
     n_total = int(ledger.conn.execute("SELECT count(*) FROM forecasts").fetchone()[0])
-    recent = recent_rows(ledger)
+    recent = recent_rows(ledger, now)
     return {
         "payload_version": PAYLOAD_VERSION,
         "git_sha": git_sha,
