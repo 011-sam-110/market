@@ -9,6 +9,7 @@ terminal table always; `--html` also writes a self-contained report under
     python scripts/niche_board.py                    # niches only, terminal
     python scripts/niche_board.py --products          # + products within the top niches
     python scripts/niche_board.py --products --html   # + a report file
+    python scripts/niche_board.py --with-quotes       # + each supplier quote's verdict
 
 Every knob's value, pass/fail/unknown, and denominator coverage is printed
 per row; a row whose sell-through is `lifetime` (no second snapshot yet)
@@ -64,6 +65,9 @@ def main() -> int:
                     help="also rank products within the top-ranked niches")
     ap.add_argument("--html", action="store_true",
                     help="write a self-contained HTML report under DATA_DIR/reports/")
+    ap.add_argument("--with-quotes", action="store_true",
+                    help="also judge each supplier quote against its product's "
+                         "max_cost (see scripts/supplier_quote.py)")
     args = ap.parse_args()
 
     cfg = config.load()
@@ -130,6 +134,13 @@ def main() -> int:
                                   notes=[ln.strip() for ln in tier3_lines])
         print()
         print(f"wrote {path}")
+
+    if args.with_quotes:
+        # Imported here, so a board run without the flag loads nothing new.
+        from phoneloop import supplier
+        print()
+        print("=== SUPPLIER QUOTES (clears / fails / unknown, after returns) ===")
+        print(supplier.print_quote_board(store, knobs, diff))
 
     return 0
 
